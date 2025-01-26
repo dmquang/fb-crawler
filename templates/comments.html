@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comments Viewer</title>
+    <link rel="icon" href="{{ url_for('static', filename='facebook.png') }}" type="image/png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #ece9e6, #ffffff);
+            padding-top: 60px; /* Add space for fixed navbar */
+        }
+
+        .container {
+            width: 95%;
+            max-width: 1400px;
+            padding: 15px;
+            margin: 20px auto;
+            box-sizing: border-box;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            vertical-align: middle;
+            border-bottom: 1px solid #ddd;
+            min-width: 100px; /* Minimum width for columns */
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        /* Column specific widths */
+        th:nth-child(1), 
+        td:nth-child(1) {
+            width: 50px;
+            text-align: center;
+        }
+
+        .author-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .author-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .post-name {
+            display: flex;
+            align-items: center;
+            min-height: 40px;
+        }
+
+        .action-cell {
+            white-space: nowrap;
+            text-align: center;
+            padding: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            margin: 2px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+
+        .edit-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .toggle-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltiptext {
+            visibility: hidden;
+            width: 300px;
+            background-color: #555;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        /* Responsive Design */
+        @media screen and (max-width: 1200px) {
+            .container {
+                width: 98%;
+                padding: 10px;
+            }
+            
+            th, td {
+                padding: 8px;
+            }
+        }
+
+        @media screen and (max-width: 768px) {
+            h1 {
+                font-size: 1.5em;
+            }
+
+            .table-wrapper {
+                margin-top: 10px;
+            }
+
+            th, td {
+                padding: 6px;
+                font-size: 12px;
+            }
+
+            .action-btn {
+                padding: 4px 8px;
+            }
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #333;
+            color: white;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 15px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-brand {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-link {
+            color: #ddd;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            color: white;
+            background-color: rgba(255,255,255,0.1);
+        }
+
+        .nav-link.active {
+            color: white;
+            background-color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">FB Manager</div>
+            <div class="nav-links">
+                <a href="/posts" class="nav-link">Posts</a>
+                <a href="/posts-off" class="nav-link">Posts Off</a>
+                <a href="/comments" class="nav-link active">Comments</a>
+                <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Comment Table</h1>
+        <div class="table-wrapper">
+            <table id="commentsTable">
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Created Time</th>
+                        <th>Comment ID</th>
+                        <th>Author</th>
+                        <th>Info</th>
+                        <th>Post ID</th>
+                        <th>Post Name</th>
+                        <th>Phone Number</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="no-data">
+                        <td colspan="9">Loading comments...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function formatDateTime(timestamp) {
+            const date = new Date(timestamp * 1000);
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            
+            return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        async function fetchComments() {
+            try {
+                // Lấy username từ localStorage
+                const currentUser = localStorage['username'];
+                
+                // Gửi username làm query parameter trong request
+                const response = await fetch(`/api/comments?username=${currentUser}`);
+                if (response.ok) {
+                    const comments = await response.json();
+                    populateTable(comments);
+                } else {
+                    console.error('Failed to fetch comments');
+                }
+            } catch (error) {
+                console.error('Error fetching comments:', error);
+            }
+        }
+
+
+        function populateTable(comments) {
+            const tableBody = document.querySelector('#commentsTable tbody');
+            tableBody.innerHTML = '';
+
+            if (!comments.length) {
+                const noDataRow = document.createElement('tr');
+                noDataRow.innerHTML = '<td colspan="9">No comments available</td>';
+                tableBody.appendChild(noDataRow);
+                return;
+            }
+
+            // Sort comments by created_time in descending order
+            comments.sort((a, b) => b.created_time - a.created_time);
+
+            comments.forEach((comment, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${formatDateTime(comment.created_time)}</td>
+                    <td><a href="https://facebook.com/${escapeHtml(comment.comment_id)}" target="_blank">${escapeHtml(comment.comment_id)}</a></td>
+                    <td>
+                        <div class="author-info">
+                            <img src="${escapeHtml(comment.author_avatar)}" alt="avatar" class="author-avatar">
+                            <a href="https://facebook.com/${escapeHtml(comment.author_id)}" target="_blank">${escapeHtml(comment.author_name)}</a>
+                        </div>
+                    </td>
+                    <td>${escapeHtml(comment.info || '')}</td>
+                    <td><a href="https://facebook.com/${escapeHtml(comment.post_id)}" target="_blank">${escapeHtml(comment.post_id)}</a></td>
+                    <td class="tooltip">
+                        <div class="post-name">${escapeHtml(comment.post_name || 'Unknown')}</div>
+                        <span class="tooltiptext">${escapeHtml(comment.content)}</span>
+                    </td>
+                    <td>${escapeHtml(comment.phone_number || '')}</td>
+                    <td class="action-cell">
+                        <button class="action-btn delete-btn" onclick="deleteComment('${escapeHtml(comment.comment_id)}')">Delete</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+
+        async function deleteComment(commentId) {
+            if (!confirm('Are you sure you want to delete this comment?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/comments/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ comment_id: commentId })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Comment deleted successfully');
+                    fetchComments(); // Refresh table
+                } else {
+                    alert('Failed to delete comment: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to delete comment. Please try again.');
+            }
+        }
+
+        // Fetch comments initially
+        fetchComments();
+
+        // Refresh every 10 seconds
+        setInterval(fetchComments, 10000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Posts Manager</title>
+    <link rel="icon" href="{{ url_for('static', filename='facebook.png') }}" type="image/png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #ece9e6, #ffffff);
+            padding-top: 60px; /* Add space for fixed navbar */
+        }
+
+        .container {
+            width: 95%;
+            max-width: 1400px;
+            padding: 15px;
+            margin: 20px auto;
+            box-sizing: border-box;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            vertical-align: middle;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        /* Column specific styles */
+        th:nth-child(1), td:nth-child(1) {
+            width: 50px;
+            text-align: center;
+        }
+
+        .action-cell {
+            white-space: nowrap;
+            text-align: center;
+            min-width: 200px;
+        }
+
+        /* Button styles */
+        .action-btn {
+            padding: 6px 12px;
+            margin: 0 2px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+
+        .edit-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .edit-btn:hover {
+            background-color: #45a049;
+        }
+
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+
+        .toggle-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+
+        .toggle-btn:hover {
+            background-color: #0b7dda;
+        }
+
+        .status-active {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .status-inactive {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        /* Responsive Design */
+        @media screen and (max-width: 1200px) {
+            .container { width: 98%; }
+            th, td { padding: 8px; }
+        }
+
+        @media screen and (max-width: 768px) {
+            h1 { font-size: 1.5em; }
+            th, td { 
+                padding: 6px;
+                font-size: 12px;
+            }
+            .action-btn { padding: 4px 8px; }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 500px;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .close {
+            position: absolute;
+            right: 20px;
+            top: 10px;
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: black;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .form-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* Ẩn nút toggle khi status là inactive */
+        .toggle-btn.hidden {
+            display: none;
+        }
+
+        .add-post-form {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .form-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+        }
+
+        .add-btn {
+            background-color: #4CAF50;
+            color: white;
+            min-width: 100px;
+        }
+
+        .add-btn:hover {
+            background-color: #45a049;
+        }
+
+        /* Responsive styles */
+        @media screen and (max-width: 768px) {
+            .form-row {
+                flex-direction: column;
+            }
+            
+            .form-input {
+                width: 100%;
+            }
+            
+            .add-btn {
+                width: 100%;
+                margin-top: 10px;
+            }
+        }
+
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #333;
+            color: white;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 15px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-brand {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-link {
+            color: #ddd;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            color: white;
+            background-color: rgba(255,255,255,0.1);
+        }
+
+        .nav-link.active {
+            color: white;
+            background-color: #4CAF50;
+        }
+
+        /* Update action buttons */
+        .stop-btn {
+            background-color: #ffc107;
+            color: black;
+        }
+
+        .stop-btn:hover {
+            background-color: #e0a800;
+        }
+    </style>
+</head>
+<body>
+    <!-- Remove the navbar links for login and dashboard -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">FB Manager</div>
+            <div class="nav-links">
+                <a href="/posts" class="nav-link active">Posts</a>
+                <a href="/posts-off" class="nav-link">Posts Off</a>
+                <a href="/comments" class="nav-link">Comments</a>
+                <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Post Manager</h1>
+        
+        <!-- Add Post Form -->
+        <div class="add-post-form">
+            <div class="form-row">
+                <input type="text" id="newPostName" placeholder="Post Name" class="form-input">
+                <input type="text" id="newPostUrl" placeholder="Post URL" class="form-input">
+                <button onclick="addPost()" class="action-btn add-btn">Add Post</button>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <table id="postsTable">
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Created Time</th>
+                        <th>Post ID</th>
+                        <th>Post Name</th>
+                        <th>Last Comment</th>
+                        <th>Comments</th>
+                        <th>Likes</th>
+                        <th>Delay (ms)</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="no-data">
+                        <td colspan="10">Loading posts...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Modal Edit -->
+        <div id="editModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Edit Post</h2>
+                <form id="editForm">
+                    <div class="form-group">
+                        <label for="editPostName">Post Name:</label>
+                        <input type="text" id="editPostName" name="post_name" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPostUrl">Post URL:</label>
+                        <input type="text" id="editPostUrl" name="post_url">
+                    </div>
+                    <div class="form-group">
+                        <label for="editDelay">Delay (ms):</label>
+                        <input type="number" id="editDelay" name="delay" min="0">
+                    </div>
+                    <div class="form-buttons">
+                        <button type="submit" class="action-btn edit-btn">Save Changes</button>
+                        <button type="button" class="action-btn delete-btn" onclick="closeModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Details Modal -->
+    <div id="userDetailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeUserDetailsModal()">&times;</span>
+            <h2 id="userDetailsTitle">User Details</h2>
+            <div id="tabContent"></div>
+        </div>
+    </div>
+
+    <script>
+        function formatDateTime(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp * 1000);
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            
+            return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
+        }
+
+        async function fetchUserPosts() {
+        const username = localStorage['username'];
+        const response = await fetch('/api/user/all-posts', {
+            method: 'POST',  
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            populateTable(data.posts);
+        } else {
+            document.getElementById('mainContent').innerHTML = '<div class="error">Failed to load posts.</div>';
+        }
+    }
+
+    function populateTable(posts) {
+        const tableBody = document.querySelector('#postsTable tbody');
+        tableBody.innerHTML = ''; 
+
+        if (!posts || posts.length === 0) {
+            const noDataRow = document.createElement('tr');
+            noDataRow.innerHTML = '<td colspan="10">No posts available</td>';
+            tableBody.appendChild(noDataRow);
+            return;
+        }
+
+        posts.forEach((post, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${index + 1}</td>
+                <td>${formatDateTime(post.time_created)}</td>
+                <td><a href="${escapeHtml(post.post_url)}" target="_blank">${escapeHtml(post.id)}</a></td>
+                <td>${escapeHtml(post.post_name)}</td>
+                <td>${formatDateTime(post.last_comment)}</td>
+                <td>${post.comment_count || 0}</td>
+                <td>${post.reaction_count || 0}</td>
+                <td>${post.delay || 'N/A'}</td>
+                <td class="${post.status === 'active' ? 'status-active' : 'status-inactive'}">${escapeHtml(post.status)}</td>
+                <td class="action-cell">
+                    ${post.status === 'active' ? `<button class="action-btn stop-btn" onclick="stopPost('${escapeHtml(post.post_name)}')">Stop</button>` : ''}
+                    <button class="action-btn delete-btn" onclick="deletePost('${escapeHtml(post.post_name)}')">Delete</button>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+
+        const modal = document.getElementById("editModal");
+        const span = document.getElementsByClassName("close")[0];
+
+        function openEditModal(postName, postUrl, delay) {
+            document.getElementById('editPostName').value = postName;
+            document.getElementById('editPostUrl').value = postUrl;
+            document.getElementById('editDelay').value = delay;
+            modal.style.display = "block";
+        }
+
+        function closeModal() {
+            modal.style.display = "none";
+        }
+
+        span.onclick = closeModal;
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        document.getElementById('editForm').onsubmit = async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                post_name: document.getElementById('editPostName').value,
+                post_url: document.getElementById('editPostUrl').value,
+                delay: parseInt(document.getElementById('editDelay').value)
+            };
+
+            try {
+                const response = await fetch('/api/posts/edit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Post updated successfully');
+                    closeModal();
+                    fetchUserPosts();
+                } else {
+                    alert('Failed to update post: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to update post. Please try again.');
+            }
+        };
+
+        async function deletePost(postName) {
+            if (!confirm('Are you sure you want to delete this post?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/posts/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ post_name: postName })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert('Post deleted successfully');
+                    fetchUserPosts();
+                } else {
+                    alert('Failed to delete post: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to delete post. Please try again.');
+            }
+        }
+        async function addPost() {
+            const postName = document.getElementById('newPostName').value.trim();
+            const postUrl = document.getElementById('newPostUrl').value.trim();
+            const username = localStorage['username']
+            if (!postName || !postUrl) {
+                alert('Please fill in Post Name and Post URL.');
+                return;
+            }
+            try {
+                const response = await fetch('/api/posts/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        post_name: postName,
+                        post_url: postUrl,
+                        username: username
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert('Post added successfully');
+                    document.getElementById('newPostName').value = '';
+                    document.getElementById('newPostUrl').value = '';
+                    fetchUserPosts();
+                } else {
+                    alert('Failed to add post: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to add post. Please try again.');
+            }
+        }
+        document.getElementById('newPostUrl').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addPost();
+            }
+        });
+        fetchUserPosts();
+        setInterval(fetchUserPosts, 15000);
+
+        async function stopPost(postName) {
+            if (!confirm('Are you sure you want to stop this post?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/posts/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ post_name: postName })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Post stopped successfully');
+                    fetchUserPosts();
+                } else {
+                    alert('Failed to stop post: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to stop post. Please try again.');
+            }
+        }
+    </script>
+
+</body>
+</html>

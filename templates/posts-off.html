@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FB Manager - Posts Off</title>
+    <link rel="icon" href="{{ url_for('static', filename='facebook.png') }}" type="image/png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #333;
+            color: white;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 15px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .nav-brand {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+        .nav-link {
+            color: #ddd;
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        .nav-link:hover {
+            color: white;
+            background-color: rgba(255,255,255,0.1);
+        }
+        .nav-link.active {
+            color: white;
+            background-color: #4CAF50;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 80px auto 20px;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .action-btn {
+            padding: 6px 12px;
+            margin: 2px;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .resume-btn { background-color: #4CAF50; color: white; }
+        .delete-btn { background-color: #f44336; color: white; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">FB Manager</div>
+            <div class="nav-links">
+                <a href="/posts" class="nav-link">Posts</a>
+                <a href="/posts-off" class="nav-link active">Posts Off</a>
+                <a href="/comments" class="nav-link">Comments</a>
+                <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>Stopped Posts</h2>
+        <table id="postsTable">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Time Created</th>
+                    <th>Post ID</th>
+                    <th>Post Name</th>
+                    <th>Last Comment</th>
+                    <th>Comments</th>
+                    <th>Reactions</th>
+                    <th>Delay</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            fetch('/api/stopped-posts')
+                .then(response => response.json())
+                .then(data => populateTable(data.stopped_posts))
+                .catch(error => console.error('Error:', error));
+        });
+
+        function populateTable(posts) {
+            const tableBody = document.querySelector('#postsTable tbody');
+            tableBody.innerHTML = '';
+
+            if (!posts || posts.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="10">No posts available</td></tr>';
+                return;
+            }
+
+            posts.forEach((post, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${formatDateTime(post.time_created)}</td>
+                    <td><a href="${post.post_url}" target="_blank">${post.id}</a></td>
+                    <td>${post.post_name}</td>
+                    <td>${formatDateTime(post.last_comment)}</td>
+                    <td>${post.comment_count || 0}</td>
+                    <td>${post.reaction_count || 0}</td>
+                    <td>${post.delay || 'N/A'}</td>
+                    <td>${post.status}</td>
+                    <td>
+                        <button class="action-btn resume-btn" onclick="resumePost('${post.post_name}')">Resume</button>
+                        <button class="action-btn delete-btn" onclick="deletePost('${post.post_name}')">Delete</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function formatDateTime(timestamp) {
+            if (!timestamp) return 'N/A';
+            return new Date(timestamp * 1000).toLocaleString();
+        }
+
+        function resumePost(postName) {
+            fetch('/api/posts/resume', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ post_name: postName })
+            })
+            .then(response => response.json())
+            .then(() => location.reload())
+            .catch(error => console.error('Error:', error));
+        }
+
+        function deletePost(postName) {
+            if (confirm('Are you sure you want to delete this post?')) {
+                fetch(`/api/stopped-posts/delete`, {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ post_name: postName })
+                })
+                .then(response => response.json())
+                .then(() => location.reload())
+                .catch(error => console.error('Error:', error));
+            }
+        }
+    </script>
+</body>
+</html>
