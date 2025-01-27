@@ -1,10 +1,13 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for
-from core.api import FacebookCrawler
+from core.api import FacebookCrawler, FacebookAuthencation, CheckProxies
 from utils import DatabaseManager
 from config import *
 import time
 import jwt
 from functools import wraps
+import pandas as pd
+from io import BytesIO
+from flask import Response
 from datetime import datetime, timedelta
 
 # Khởi tạo Flask app
@@ -34,15 +37,12 @@ def token_required(f):
 
 @app.route('/')
 def index():
-    return redirect(url_for('login'))
+    return redirect(url_for('login_page'))
 
 @app.route('/logout')
 def logout():
     return render_template('logout.html')
 
-@app.route('/admin/login')
-def admin_login_page():
-    return render_template('admin_login.html')
 
 @app.route('/dashboard')
 def dashboard():
@@ -59,6 +59,15 @@ def postsoff_page():
 @app.route('/comments')
 def comments():
     return render_template('comments.html')
+
+@app.route('/cookies')
+def cookies():
+    return render_template('cookies.html')
+
+@app.route('/proxies')
+def proxies():
+    return render_template('proxies.html')
+
 
 @app.route('/api/links', methods=['GET', 'POST'])
 def add_link():
@@ -120,20 +129,50 @@ def perform_delete(db, post_id):
 @app.route('/api/comments')
 def get_comments():
     try:
-        # Lấy username từ query parameters
+        # Lấy các tham số từ query parameters
         username = request.args.get('username')
-        
+        start_date = request.args.get('start_date')  # Ngày bắt đầu (YYYY-MM-DD)
+        end_date = request.args.get('end_date')      # Ngày kết thúc (YYYY-MM-DD)
+
+        # Kiểm tra username
         if not username:
             return jsonify({'error': 'Username is required'}), 400
         
+        # Kiểm tra nếu start_date và end_date là "null"
+        if start_date == 'null':
+            start_date = None
+        if end_date == 'null':
+            end_date = None
+
+        # Kết nối database
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
 
-        comments = db.fetch_data('comments', condition=f"username = '{username}'")
+        # Xây dựng điều kiện lọc
+        conditions = []
+        
+        # Lọc theo username, ngoại trừ 'admin'
+        if username != 'admin':
+            conditions.append(f"username = '{username}'")
+
+        # Lọc theo ngày nếu có, nếu không có thì không lọc theo ngày
+        if start_date and end_date:
+            conditions.append(f"created_time >= UNIX_TIMESTAMP('{start_date} 00:00:00')")
+            conditions.append(f"created_time <= UNIX_TIMESTAMP('{end_date} 23:59:59')")
+        elif start_date:
+            conditions.append(f"created_time >= UNIX_TIMESTAMP('{start_date} 00:00:00')")
+        elif end_date:
+            conditions.append(f"created_time <= UNIX_TIMESTAMP('{end_date} 23:59:59')")
+
+        # Kết hợp các điều kiện
+        condition_query = ' AND '.join(conditions) if conditions else ''
+
+        # Fetch dữ liệu từ database
+        comments = db.fetch_data('comments', condition=condition_query)
         db.close()
 
-        comments_data = []
-        for comment in comments:
-            comments_data.append({
+        # Chuyển dữ liệu thành danh sách dictionary
+        comments_data = [
+            {
                 'comment_id': comment[0],
                 'post_id': comment[1],
                 'post_name': comment[2],
@@ -145,18 +184,98 @@ def get_comments():
                 'phone_number': comment[8],
                 'created_time': comment[9],
                 'username': comment[10],
-                
-            })
-        
+            }
+            for comment in comments
+        ]
+
         return jsonify(comments_data), 200
-    
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/comments/export')
+def export_comments():
+    try:
+        # Lấy các tham số từ query parameters
+        username = request.args.get('username')
+        start_date = request.args.get('start_date')  # Ngày bắt đầu (YYYY-MM-DD)
+        end_date = request.args.get('end_date')      # Ngày kết thúc (YYYY-MM-DD)
+
+        # Kiểm tra username
+        if not username:
+            return jsonify({'error': 'Username is required'}), 400
+        
+        # Kiểm tra nếu start_date và end_date là "null"
+        if start_date == 'null':
+            start_date = None
+        if end_date == 'null':
+            end_date = None
+
+        # Kết nối database
+        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+
+        # Xây dựng điều kiện lọc
+        conditions = []
+        
+        # Lọc theo username, ngoại trừ 'admin'
+        if username != 'admin':
+            conditions.append(f"username = '{username}'")
+
+        # Lọc theo ngày nếu có, nếu không có thì không lọc theo ngày
+        if start_date and end_date:
+            conditions.append(f"created_time >= UNIX_TIMESTAMP('{start_date} 00:00:00')")
+            conditions.append(f"created_time <= UNIX_TIMESTAMP('{end_date} 23:59:59')")
+        elif start_date:
+            conditions.append(f"created_time >= UNIX_TIMESTAMP('{start_date} 00:00:00')")
+        elif end_date:
+            conditions.append(f"created_time <= UNIX_TIMESTAMP('{end_date} 23:59:59')")
+
+        # Kết hợp các điều kiện
+        condition_query = ' AND '.join(conditions) if conditions else ''
+
+        # Fetch dữ liệu từ database
+        comments = db.fetch_data('comments', condition=condition_query)
+        db.close()
+
+        # Chuyển dữ liệu thành danh sách dictionary
+        comments_data = [
+            {
+                'comment_id': comment[0],
+                'post_id': comment[1],
+                'post_name': comment[2],
+                'author_id': comment[3],
+                'author_name': comment[4],
+                'author_avatar': comment[5],
+                'content': comment[6],
+                'info': comment[7],
+                'phone_number': comment[8],
+                'created_time': comment[9],
+                'username': comment[10],
+            }
+            for comment in comments
+        ]
+
+        # Tạo DataFrame từ dữ liệu
+        df = pd.DataFrame(comments_data)
+
+        # Tạo một đối tượng BytesIO để lưu trữ tệp Excel trong bộ nhớ
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Comments')
+
+        output.seek(0)
+
+        # Trả về file Excel dưới dạng response
+        return Response(output, 
+                        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+                        headers={"Content-Disposition": "attachment; filename=comments.xlsx"})
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-
-@app.route('/api/comments/delete', methods=['POST'])
-def delete_comment():
+@app.route('/api/comments/hide', methods=['POST'])
+def hide_comment():
     try:
         data = request.get_json()
         comment_id = data.get('comment_id')
@@ -235,13 +354,13 @@ def delete_post():
     try:
         data = request.get_json()
         post_name = data['post_name']
-        username = get_current_username()  # Lấy username từ token
 
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
         
         db.delete_data('posts', f"post_name = '{post_name}'")
         db.delete_data('stopped_posts', f"post_name = '{post_name}'")
 
+        db.close()
 
         return jsonify({'success': True}), 200
     except Exception as e:
@@ -258,29 +377,40 @@ def stop_post():
         # Fetch the post details
         post_sql = "SELECT * FROM posts WHERE post_name = %s"
         post = db.execute_query(post_sql, (post_name,))[0]
+        #('908470518127187', 'rap', 'https://www.facebook.com/share/v/18tef9pgYq/', 2043, 1333, 1737870768, 1737961517, 10000, 'active', 'qquang72')
+        print(post)
         username = post[-1]
         
         if not post:
             return jsonify({'error': 'Post not found'}), 404
 
-        db.bulk_update('stopped_posts', [{'post_id': post[0], 'post_name': post[1], 'post_url': post[2], 'reaction_count': post[3], 'comment_count': post[4], 'time_created': post[5], 'last_comment': post[6], 'delay': post[7], 'status': 'stopped', 'username': username}], condition_key=f"username")
+        db.add_data('stopped_posts', ['post_id', 'post_name', 'post_url', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'delay', 'status', 'username', 'stopped_time'], [(post[0], post[1], post[2], post[3], post[4], post[5], post[6], post[7], 'stopped', username, f'{int(time.time())}')])
 
         # Delete the post from the original table
         db.delete_data('posts', f"post_name = '{post_name}'")
 
+        db.close()
+
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
 
-@app.route('/api/stopped-posts', methods=['GET'])
+
+@app.route('/api/stopped-posts', methods=['POST'])
 def get_stopped_posts_v2():  # Renamed function to avoid conflict
     try:
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
         
-        # Fetch all stopped posts
-        stopped_posts_sql = "SELECT * FROM stopped_posts"
+        username = request.get_json()['username']
+
+        if username != 'admin':
+            stopped_posts_sql = f"SELECT * FROM stopped_posts WHERE username = '{username}'"
+        else:
+            stopped_posts_sql = "SELECT * FROM stopped_posts"
         posts = db.execute_query(stopped_posts_sql)
-        
+        db.close()
+
         return jsonify({
             'stopped_posts': [{
                 'id': p[0],
@@ -289,10 +419,10 @@ def get_stopped_posts_v2():  # Renamed function to avoid conflict
                 'reaction_count': p[3],
                 'comment_count': p[4],
                 'time_created': p[5],
-                'delay': p[6],
-                'status': p[7],
-                'username': p[8],
-                'stopped_time': p[9]
+                'delay': p[7],
+                'status': p[8],
+                'username': p[9],
+                'stopped_time': p[10]
             } for p in posts]
         }), 200
         
@@ -341,7 +471,7 @@ def get_posts():
                 'status': post[8],
                 'username': post[9]
             })
-        
+        db.close()
         return jsonify(posts_data), 200
         
     except Exception as e:
@@ -363,7 +493,7 @@ def edit_post():
             WHERE post_name = %s
         """
         db.execute_query(update_sql, (delay, post_name))
-
+        db.close()
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -398,7 +528,7 @@ def add_post():
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, {SCAN_DELAY})
         """
         db.execute_query(insert_sql, (post_id, post_name, post_url, username, reaction_count, comment_count, time_created, status))
-        
+        db.close()
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -453,7 +583,7 @@ def login():
         # Kiểm tra thông tin đăng nhập
         login_sql = "SELECT * FROM admin.users WHERE username = %s AND password = %s"
         result = db.execute_query(login_sql, (username, password))
-        
+        db.close()
         if result:
             user = result[0]
             
@@ -490,32 +620,6 @@ def login():
             'error': str(e)
         }), 500
 
-
-@app.route('/api/user/info')
-@token_required
-def get_user_info(current_user):
-    try:
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='admin')
-        
-        sql = "SELECT * FROM users WHERE username = %s"
-        result = db.execute_query(sql, (current_user,))
-        
-        if result:
-            user = result[0]
-            return jsonify({
-                'username': user[0],
-                'link_scan_limit': user[2],
-                'link_follow_limit': user[3],
-                'link_hide_limit': user[4],
-                'expire_time': user[5],
-                'permission': user[6]
-            }), 200
-        else:
-            return jsonify({'error': 'User not found'}), 404
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 # Add admin check decorator
 def admin_required(f):
     @wraps(f)
@@ -538,23 +642,24 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Route để hiển thị trang admin
 @app.route('/admin')
 def admin_page():
     return render_template('admin.html')
 
+# API lấy danh sách người dùng
 @app.route('/api/admin/users')
-@admin_required
 def get_users():
     try:
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='admin')
         
-        # Add debug logging
         print("Fetching users from admin database...")
         
         users_sql = "SELECT * FROM users"
         users = db.execute_query(users_sql)
         
         print(f"Found {len(users) if users else 0} users")
+        db.close()
         
         if not users:
             return jsonify({'users': []}), 200
@@ -565,40 +670,17 @@ def get_users():
                 'link_scan_limit': user[2],
                 'link_follow_limit': user[3],
                 'link_hide_limit': user[4],
-                'expire_time': user[5]
-            } for user in users]
+                'expire_time': user[5],
+                'permission': user[6]
+            } for user in users if user[0] != 'admin']
         }), 200
         
     except Exception as e:
         print(f"Error in get_users: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/admin/users/<username>')
-@admin_required
-def get_user(username):
-    try:
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='admin')
-        sql = "SELECT * FROM users WHERE username = %s"
-        result = db.execute_query(sql, (username,))
-        
-        if result:
-            user = result[0]
-            return jsonify({
-                'username': user[0],
-                'link_scan_limit': user[2],
-                'link_follow_limit': user[3],
-                'link_hide_limit': user[4],
-                'expire_time': user[5],
-                'permission': user[6]
-            }), 200
-        else:
-            return jsonify({'error': 'User not found'}), 404
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+# API thêm người dùng mới
 @app.route('/api/admin/users', methods=['POST'])
-@admin_required
 def add_user():
     try:
         data = request.get_json()
@@ -617,13 +699,13 @@ def add_user():
         
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='admin')
         
-        # Check if username exists
+        # Kiểm tra nếu username đã tồn tại
         check_sql = "SELECT COUNT(*) FROM users WHERE username = %s"
         result = db.execute_query(check_sql, (username,))
         if result[0][0] > 0:
             return jsonify({'success': False, 'error': 'Username already exists'}), 400
             
-        # Insert new user
+        # Chèn người dùng mới vào cơ sở dữ liệu
         insert_sql = """
             INSERT INTO users (username, password, link_scan_limit, link_follow_limit, 
                              link_hide_limit, expire_time, permission)
@@ -632,7 +714,7 @@ def add_user():
         
         values = (username, password, scan_limit, follow_limit, hide_limit, expire_time, permission)
         db.execute_query(insert_sql, values)
-        
+        db.close()
         return jsonify({
             'success': True, 
             'message': 'User added successfully',
@@ -647,9 +729,10 @@ def add_user():
         }), 200
         
     except Exception as e:
-        print('Error adding user:', str(e))  # Debug log
+        print('Error adding user:', str(e))
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# API cập nhật người dùng
 @app.route('/api/admin/users/<username>', methods=['PUT'])
 @admin_required
 def update_user(username):
@@ -684,28 +767,29 @@ def update_user(username):
             values = (scan_limit, follow_limit, hide_limit, expire_time, permission, username)
             
         db.execute_query(update_sql, values)
-        
+        db.close()
         return jsonify({'success': True, 'message': 'User updated successfully'}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# API xóa người dùng
 @app.route('/api/admin/users/<username>', methods=['DELETE'])
 @admin_required
 def delete_user(username):
     try:
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='admin')
         
-        # Check if user exists
+        # Kiểm tra xem người dùng có tồn tại không
         check_sql = "SELECT COUNT(*) FROM users WHERE username = %s"
         result = db.execute_query(check_sql, (username,))
         if result[0][0] == 0:
             return jsonify({'error': 'User not found'}), 404
             
-        # Delete user
+        # Xóa người dùng
         delete_sql = "DELETE FROM users WHERE username = %s"
         db.execute_query(delete_sql, (username,))
-        
+        db.close()
         return jsonify({'success': True, 'message': 'User deleted successfully'}), 200
         
     except Exception as e:
@@ -786,7 +870,7 @@ def get_user_details(username):
             ORDER BY deleted_time DESC
         """
         deleted_comments = user_db.execute_query(deleted_comments_sql, (username,))
-
+        user_db.close()
         return jsonify({
             'user': user_data,
             'posts': [{
@@ -896,7 +980,7 @@ def get_user_tables(username):
             WHERE username = %s
         """
         cookies = db.execute_query(cookies_sql, (username,))
-        
+        db.close()
         return jsonify({
             'active_posts': [{
                 'post_id': p[0],
@@ -989,7 +1073,7 @@ def get_all_data():
             ORDER BY c.created_time DESC
         """
         comments = db.execute_query(all_comments_sql)
-        
+        db.close()
         return jsonify({
             'posts': [{
                 'post_id': p[0],
@@ -1039,7 +1123,7 @@ def get_all_posts():
             ORDER BY time_created DESC
         """
         posts = db.execute_query(posts_sql, (username,))
-        
+        db.close()
         print(f"Found {len(posts) if posts else 0} active posts for user: {username}")
         
         return jsonify({
@@ -1111,7 +1195,7 @@ def get_all_stopped_posts():
         posts = db.execute_query(stopped_posts_sql)
         
         print(f"Found {len(posts) if posts else 0} stopped posts")
-        
+        db.close()
         return jsonify({
             'stopped_posts': [{
                 'id': p[0],
@@ -1224,7 +1308,7 @@ def get_post_details(post_name):
         # Fetch post details
         post_sql = "SELECT * FROM posts WHERE post_name = %s"
         post = db.execute_query(post_sql, (post_name,))
-        
+        db.close()
         if post:
             return jsonify({
                 'post_id': post[0][0],
@@ -1249,7 +1333,7 @@ def get_stopped_posts():
         # Fetch all stopped posts
         stopped_posts_sql = "SELECT * FROM stopped_posts"
         posts = db.execute_query(stopped_posts_sql)
-        
+        db.close()
         return jsonify({
             'stopped_posts': [{
                 'id': p[0],
@@ -1291,7 +1375,7 @@ def resume_post():
 
     # Lấy dữ liệu của bài viết cần resume
     stopped_post_data = stopped_posts[0]
-    print(stopped_post_data)
+
     # ('624818366721418', 'wibu', 'https://www.facebook.com/share/p/1A1zwXG9ba/', 4859, 530, 1737805103, None, 10000, 'admin')
     #'post_id', 'post_name', 'post_url', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'delay', 'status', 'username'
     # Chuyển bài viết vào bảng `posts`x
@@ -1326,6 +1410,107 @@ def resume_post():
         return jsonify({'error': 'An error occurred while resuming the post'}), 500
 
 
+@app.route('/api/user/cookies', methods=['GET', 'POST', 'DELETE'])  # Đã sửa methods
+def user_cookies():
+    try:
+        if request.method == 'GET':
+            db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+            username = request.args.get('user')
+            cookies = db.fetch_data('cookies', condition=f"username = '{username}'")
+            db.close()
+            return jsonify({
+                'cookies': [{
+                    'cookie_id': ck[0],
+                    'cookie': ck[1],
+                    'status': ck[2],
+                    'username': ck[3]
+                } for ck in cookies]
+            }), 200
+            
+
+        elif request.method == 'POST':  # Đã đổi từ 'ADD' sang 'POST'
+            db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+            data = request.get_json()
+            if 'cookie' not in data:
+                return jsonify({'error': 'Missing cookie in request data'}), 400
+                
+            cookie = data['cookie']
+            username = data['username']
+            fb = FacebookAuthencation(cookie)
+            
+            if not fb.user_id:
+                return jsonify({'error': 'Invalid cookie or cookie is expired!'}), 400
+                
+            db.add_data('cookies', ['cookie_id', 'cookie', 'status', 'username'], 
+                       [(fb.user_id, cookie, 'Live', username)])
+            db.close()
+            return jsonify({'message': 'Cookie added successfully!'}), 200
+
+        elif request.method == 'DELETE':
+            db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+            data = request.get_json()
+            if 'cookie' not in data:
+                return jsonify({'error': 'Missing cookie in request data'}), 400
+            
+            cookie = data['cookie']
+                
+            db.delete_data('cookies', condition=f"cookie = '{cookie}'")
+            db.close()
+            return jsonify({'message': 'Cookie deleted successfully!'}), 200
+
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.route('/api/user/proxies', methods=['GET', 'POST', 'DELETE'])
+def user_proxies():
+    try:
+        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+
+        if request.method == 'GET':
+            username = request.args.get('user')
+            proxies = db.fetch_data('proxies', condition=f"username = '{username}'")
+            db.close()
+            return jsonify({
+                'proxies': [{
+                    'proxy': p[0],
+                    'status': p[1],
+                    'username': p[2]
+                } for p in proxies]
+            }), 200
+
+        elif request.method == 'POST':
+            data = request.get_json()
+            if 'proxy' not in data or 'username' not in data:
+                return jsonify({'error': 'Missing proxy or username in request data'}), 400
+
+            proxy = data['proxy']
+            username = data['username']
+            if not CheckProxies.check(proxy):
+                return jsonify({'error': 'Proxy is invalid or not working!'}), 500
+            
+            db.add_data('proxies', ['proxy', 'status', 'username'], [(proxy, 'Active', username)])
+            db.close()
+            return jsonify({'message': 'Proxy added successfully!'}), 200
+
+        elif request.method == 'DELETE':
+            data = request.get_json()
+            if 'proxy' not in data or 'username' not in data:
+                return jsonify({'error': 'Missing proxy or username in request data'}), 400
+
+            proxy = data['proxy']
+            username = data['username']
+
+            db.delete_data('proxies', condition=f"proxy = '{proxy}' AND username = '{username}'")
+            db.close()
+            return jsonify({'message': 'Proxy deleted successfully!'}), 200
+
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+    
+
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=7220)
+    app.run(debug=True)

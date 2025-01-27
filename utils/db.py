@@ -1,6 +1,5 @@
 import mysql.connector
 from typing import List
-import logging
 from datetime import datetime
 import os
 
@@ -24,9 +23,6 @@ class DatabaseManager:
             'connection_timeout': 60,
             'autocommit': True
         }
-        
-        # Thiết lập logging
-        self._setup_logging()
 
     def _connect(self) -> mysql.connector.connect:
         """Thiết lập kết nối cơ sở dữ liệu"""
@@ -35,21 +31,8 @@ class DatabaseManager:
             cursor = conn.cursor(buffered=True)  # Sử dụng buffered cursor
             return conn, cursor
         except mysql.connector.Error as err:
-            self.logger.error(f"Error while connecting to database: {err}")
+            print(f"Error while connecting to database: {err}")
             raise
-
-    def _setup_logging(self) -> None:
-        """Thiết lập cấu hình logging"""
-        if not os.path.exists('logs'):
-            os.makedirs('logs')
-
-        self.logger = logging.getLogger('DatabaseManager')
-        self.logger.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        log_file = f'logs/database_{datetime.now().strftime("%Y-%m-%d")}.log'
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setFormatter(formatter)
-        self.logger.addHandler(file_handler)
 
     def add_data(self, table: str, columns: List[str], values_list: List[tuple]) -> None:
         conn, cursor = self._connect()
@@ -60,7 +43,7 @@ class DatabaseManager:
             cursor.executemany(sql, values_list)
             conn.commit()
         except mysql.connector.Error as err:
-            self.logger.error(f"Error while adding data: {err}")
+            print(f"Error while adding data: {err}")
             conn.rollback()
         finally:
             cursor.close()
@@ -90,7 +73,7 @@ class DatabaseManager:
             
             conn.commit()
         except mysql.connector.Error as err:
-            self.logger.error(f"Error while bulk updating or inserting data: {err}")
+            print(f"Error while bulk updating or inserting data: {err}")
             conn.rollback()
         finally:
             cursor.close()
@@ -103,7 +86,7 @@ class DatabaseManager:
             cursor.execute(sql)
             conn.commit()
         except mysql.connector.Error as err:
-            self.logger.error(f"Error while deleting data: {err}")
+            print(f"Error while deleting data: {err}")
             conn.rollback()
         finally:
             cursor.close()
@@ -118,7 +101,7 @@ class DatabaseManager:
             cursor.execute(sql)
             return cursor.fetchall()
         except mysql.connector.Error as err:
-            self.logger.error(f"Error while fetching data: {err}")
+            print(f"Error while fetching data: {err}")
             return []
         finally:
             cursor.close()
@@ -133,7 +116,7 @@ class DatabaseManager:
                 cursor.execute(query, params)
             return cursor.fetchall()
         except mysql.connector.Error as err:
-            self.logger.error(f"Error while executing query: {err}")
+            print(f"Error while executing query: {err}")
             return []
         finally:
             cursor.close()
@@ -144,6 +127,6 @@ class DatabaseManager:
         if hasattr(self, 'conn') and self.conn.is_connected():
             self.cursor.close()
             self.conn.close()
-            self.logger.info("Database connection closed.")
+            print("Database connection closed.")
         else:
-            self.logger.warning("Database connection is already closed or was not initialized.")
+            print("Database connection is already closed or was not initialized.")

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FB Manager - Cookies</title>
+    <link rel="icon" href="{{ url_for('static', filename='facebook.png') }}" type="image/png">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .navbar { position: fixed; top: 0; left: 0; right: 0; background-color: #333; color: white; z-index: 1000; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .nav-container { max-width: 1400px; margin: 0 auto; padding: 0 15px; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+        .nav-brand { font-size: 1.5em; font-weight: bold; }
+        .nav-links { display: flex; gap: 20px; }
+        .nav-link { color: #ddd; text-decoration: none; padding: 8px 12px; border-radius: 4px; transition: all 0.3s ease; }
+        .nav-link:hover { color: white; background-color: rgba(255,255,255,0.1); }
+        .nav-link.active { color: white; background-color: #4CAF50; }
+        .container { max-width: 1200px; margin: 80px auto 20px; background: white; padding: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #4CAF50; color: white; }
+        .action-btn { padding: 6px 12px; margin: 2px; border: none; cursor: pointer; border-radius: 4px; }
+        .delete-btn { background-color: #f44336; color: white; }
+        .add-form { margin: 20px 0; padding: 15px; background: #f8f8f8; border-radius: 5px; }
+        .form-input { padding: 8px; width: 70%; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">FB Manager</div>
+            <div class="nav-links">
+                <a href="/posts" class="nav-link">Posts</a>
+                <a href="/posts-off" class="nav-link">Posts Off</a>
+                <a href="/cookies" class="nav-link active">Cookies</a>
+                <a href="/proxies" class="nav-link">Proxies</a>
+                <a href="/comments" class="nav-link">Comments</a>
+                <a href="/admin" class="nav-link" id="admin-btn" style="background-color: #4CAF50;">Admin</a>
+                <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h2>Manage Cookies</h2>
+        
+        <!-- Form thêm cookie mới -->
+        <div class="add-form">
+            <input type="text" class="form-input" id="newCookie" placeholder="Nhập cookie Facebook...">
+            <button class="action-btn resume-btn" onclick="addCookie()">Thêm Cookie</button>
+        </div>
+
+        <!-- Bảng hiển thị cookies -->
+        <table id="cookiesTable">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Cookie ID</th>
+                    <th>Cookie</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        // Lấy username từ session (cần implement logic phù hợp)
+        const username = localStorage['username']; // Thay bằng giá trị thực tế
+
+        document.addEventListener("DOMContentLoaded", () => {
+            fetchCookies();
+            setInterval(fetchCookies, 20000); // Gọi fetchCookies() mỗi 20 giây
+        });
+
+        async function fetchCookies() {
+            try {
+                const response = await fetch(`/api/user/cookies?user=${encodeURIComponent(username)}`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                populateCookies(data.cookies);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Lỗi khi tải cookies!');
+            }
+        }
+
+        function populateCookies(cookies) {
+            const tbody = document.querySelector('#cookiesTable tbody');
+            tbody.innerHTML = '';
+
+            if (!cookies || cookies.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">Chưa có cookies nào</td></tr>';
+                return;
+            }
+
+            cookies.forEach((cookie, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${cookie.cookie_id}</td>
+                    <td class="copy-cookie" onclick="copyToClipboard('${cookie.cookie}')">
+                        ${maskCookie(cookie.cookie)}
+                    </td>
+                    <td>${cookie.status}</td>
+                    <td>
+                        <button class="action-btn delete-btn" 
+                                onclick="deleteCookie('${cookie.cookie}')">
+                            Xóa
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Đã sao chép cookie!');
+            }).catch(err => {
+                console.error('Lỗi sao chép:', err);
+            });
+        }
+
+        function maskCookie(cookie) {
+            return cookie.substring(0, 15) + '...' + cookie.slice(-15);
+        }
+
+        async function addCookie() {
+            const cookieInput = document.getElementById('newCookie');
+            const cookie = cookieInput.value.trim();
+
+            if (!cookie) {
+                alert('Vui lòng nhập cookie!');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/user/cookies', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        username: username,
+                        cookie: cookie 
+                    })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    cookieInput.value = '';
+                    fetchCookies();
+                    alert(result.message);
+                } else {
+                    alert(result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Lỗi khi thêm cookie!');
+            }
+        }
+
+        async function deleteCookie(cookie) {
+            if (!confirm('Bạn chắc chắn muốn xóa cookie này?')) return;
+
+            try {
+                const response = await fetch('/api/user/cookies', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        username: username,
+                        cookie: cookie 
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    fetchCookies();
+                    alert(result.message);
+                } else {
+                    alert(result.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Lỗi khi xóa cookie!');
+            }
+        }
+
+    </script>
+</body>
+<script>
+    const isadmin = localStorage['username']
+    if (isadmin != 'admin') {
+        document.getElementById('admin-btn').style.display = 'none';
+    }
+</script>
+</html>

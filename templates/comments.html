@@ -236,6 +236,38 @@
             color: white;
             background-color: #4CAF50;
         }
+        
+        .filter-section {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+
+        .filter-section label {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .filter-section input {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .filter-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .export-btn {
+            background-color: #007BFF;
+            color: white;
+        }
+
+
     </style>
 </head>
 <body>
@@ -245,7 +277,10 @@
             <div class="nav-links">
                 <a href="/posts" class="nav-link">Posts</a>
                 <a href="/posts-off" class="nav-link">Posts Off</a>
+                <a href="/cookies" class="nav-link">Cookies</a>
+                <a href="/proxies" class="nav-link">Proxies</a>
                 <a href="/comments" class="nav-link active">Comments</a>
+                <a href="/admin" class="nav-link" id="admin-btn" style="background-color: #4CAF50;">Admin</a>
                 <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
             </div>
         </div>
@@ -253,6 +288,14 @@
 
     <div class="container">
         <h1>Comment Table</h1>
+        <div class="filter-section">
+            <label for="start-date">From: </label>
+            <input type="date" id="start-date">
+            <label for="end-date">To: </label>
+            <input type="date" id="end-date">
+            <button class="action-btn filter-btn" onclick="filterComments()">Apply Filter</button>
+            <button class="action-btn export-btn" onclick="exportToExcel()">Export to Excel</button>
+        </div>        
         <div class="table-wrapper">
             <table id="commentsTable">
                 <thead>
@@ -278,6 +321,54 @@
     </div>
 
     <script>
+        async function filterComments() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const username = localStorage['username']
+
+            if (!startDate || !endDate) {
+                alert('Please select both start and end dates.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/comments?start_date=${startDate}&end_date=${endDate}&username=${username}`);
+                if (response.ok) {
+                    const comments = await response.json();
+                    populateTable(comments);
+                } else {
+                    console.error('Failed to fetch filtered comments');
+                }
+            } catch (error) {
+                console.error('Error filtering comments:', error);
+            }
+        }
+
+        async function exportToExcel() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const username = localStorage['username']
+
+            try {
+                const response = await fetch(`/api/comments/export?start_date=${startDate}&username=${username}&end_date=${endDate}`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `comments_${startDate}_to_${endDate}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    alert('Failed to export comments to Excel.');
+                }
+            } catch (error) {
+                console.error('Error exporting comments:', error);
+            }
+        }
+
+
         function formatDateTime(timestamp) {
             const date = new Date(timestamp * 1000);
             const hours = String(date.getHours()).padStart(2, '0');
@@ -299,13 +390,27 @@
                 .replace(/'/g, "&#039;");
         }
 
+        function saveFilterValues() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            
+            // Lưu vào localStorage
+            localStorage.setItem('start_date', startDate);
+            localStorage.setItem('end_date', endDate);
+        }
+
         async function fetchComments() {
             try {
-                // Lấy username từ localStorage
+                // Lấy giá trị username từ localStorage
                 const currentUser = localStorage['username'];
                 
-                // Gửi username làm query parameter trong request
-                const response = await fetch(`/api/comments?username=${currentUser}`);
+                // Lấy giá trị filter từ localStorage
+                const startDate = localStorage.getItem('start_date');
+                const endDate = localStorage.getItem('end_date');
+
+                // Gửi username và các tham số filter vào query string
+                const response = await fetch(`/api/comments?username=${currentUser}&start_date=${startDate}&end_date=${endDate}`);
+                
                 if (response.ok) {
                     const comments = await response.json();
                     populateTable(comments);
@@ -317,6 +422,31 @@
             }
         }
 
+        async function filterComments() {
+            const startDate = document.getElementById('start-date').value;
+            const endDate = document.getElementById('end-date').value;
+            const username = localStorage['username'];
+            
+            if (!startDate || !endDate) {
+                alert('Please select both start and end dates.');
+                return;
+            }
+
+            // Lưu các giá trị filter vào localStorage
+            saveFilterValues();
+
+            try {
+                const response = await fetch(`/api/comments?start_date=${startDate}&end_date=${endDate}&username=${username}`);
+                if (response.ok) {
+                    const comments = await response.json();
+                    populateTable(comments);
+                } else {
+                    console.error('Failed to fetch filtered comments');
+                }
+            } catch (error) {
+                console.error('Error filtering comments:', error);
+            }
+        }
 
         function populateTable(comments) {
             const tableBody = document.querySelector('#commentsTable tbody');
@@ -352,7 +482,7 @@
                     </td>
                     <td>${escapeHtml(comment.phone_number || '')}</td>
                     <td class="action-cell">
-                        <button class="action-btn delete-btn" onclick="deleteComment('${escapeHtml(comment.comment_id)}')">Delete</button>
+                        <button class="action-btn edit-btn" onclick="hideComment('${escapeHtml(comment.comment_id)}')">Hide</button>
                     </td>
                 `;
                 tableBody.appendChild(row);
@@ -360,13 +490,13 @@
         }
 
 
-        async function deleteComment(commentId) {
-            if (!confirm('Are you sure you want to delete this comment?')) {
+        async function hideComment(commentId) {
+            if (!confirm('Are you sure you want to hide this comment?')) {
                 return;
             }
 
             try {
-                const response = await fetch('/api/comments/delete', {
+                const response = await fetch('/api/comments/hide', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -377,14 +507,14 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert('Comment deleted successfully');
+                    alert('Comment hide successfully');
                     fetchComments(); // Refresh table
                 } else {
-                    alert('Failed to delete comment: ' + data.error);
+                    alert('Failed to hide comment: ' + data.error);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Failed to delete comment. Please try again.');
+                alert('Failed to hide comment. Please try again.');
             }
         }
 
@@ -395,4 +525,10 @@
         setInterval(fetchComments, 10000);
     </script>
 </body>
+<script>
+    const isadmin = localStorage['username']
+    if (isadmin != 'admin') {
+        document.getElementById('admin-btn').style.display = 'none';
+    }
+</script>
 </html>

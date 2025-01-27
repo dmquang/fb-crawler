@@ -1,1667 +1,341 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link rel="icon" href="{{ url_for('static', filename='admin.png') }}" type="image/png">
-
+    <title>Quản lý người dùng - FB Manager</title>
     <style>
-        :root {
-            --primary-color: #4CAF50;
-            --secondary-color: #45a049;
-            --danger-color: #dc3545;
-            --background-color: #f5f5f5;
-            --card-color: #ffffff;
-        }
-
-        * {
+        /* General styles */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--background-color);
-        }
-
-        .navbar {
-            background: #333;
-            padding: 1rem 2rem;
-            position: fixed;
-            width: 100%;
-            top: 0;
-            z-index: 1000;
-        }
-
-        .nav-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .nav-brand {
-            color: white;
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 20px;
-        }
-
-        .nav-link {
-            color: white;
-            text-decoration: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            transition: background-color 0.3s;
-        }
-
-        .nav-link:hover {
-            background-color: rgba(255,255,255,0.1);
-        }
-
-        .logout-btn {
-            background-color: var(--danger-color);
         }
 
         .container {
-            max-width: 1400px;
-            margin: 80px auto 20px;
+            max-width: 1200px;
+            margin: 20px auto;
             padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
-        .dashboard-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        h2 {
+            text-align: center;
             margin-bottom: 30px;
         }
 
-        .add-user-btn {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .add-user-btn:hover {
-            background: var(--secondary-color);
-        }
-
-        .tabs {
-            display: flex;
-            margin-bottom: 20px;
-        }
-
-        .tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background: white;
-            transition: background 0.3s, color 0.3s;
-            margin-right: 5px; /* Space between tabs */
-        }
-
-        .tab.active {
-            background: var(--primary-color);
-            color: white;
-        }
-
-        .tab:not(.active):hover {
-            background: #f0f0f0;
-        }
-
-        .card {
-            background: var(--card-color);
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            overflow: hidden;
-        }
-
-        .table-responsive {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            background-color: #f8f9fa;
-            font-weight: 600;
-        }
-
-        tr:hover {
-            background-color: #f5f5f5;
-        }
-
-        .action-btn {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 5px;
-            font-size: 0.9rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .edit-btn {
-            background-color: #ffc107;
-            color: #000;
-        }
-
-        .delete-btn {
-            background-color: var(--danger-color);
-            color: white;
-        }
-
-        .view-btn {
-            background-color: #17a2b8;
-            color: white;
-        }
-
-        /* Modal styles */
-        .modal {
-            display: none; /* Hidden by default */
-            position: fixed; /* Stay in place */
-            z-index: 1000; /* Sit on top */
-            left: 0;
-            top: 0;
-            width: 100%; /* Full width */
-            height: 100%; /* Full height */
-            overflow: auto; /* Enable scroll if needed */
-            background-color: rgba(0, 0, 0, 0.6); /* Dark background with opacity */
-        }
-
-        .modal-content {
-            background-color: #ffffff;
-            margin: 10% auto; /* Center the modal */
-            padding: 20px;
-            border: none;
-            border-radius: 8px; /* Rounded corners */
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); /* Shadow effect */
-            width: 90%; /* Responsive width */
-            max-width: 500px; /* Max width for the modal */
-            transition: all 0.3s ease; /* Smooth transition */
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 10px;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            font-size: 1.5rem;
-            color: #333;
-        }
-
-        .modal-body {
-            padding: 20px 0;
-        }
-
-        .modal-body label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-
-        .modal-body input {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 1rem;
-        }
-
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            padding-top: 10px;
-        }
-
-        .modal-footer button {
-            background-color: #4CAF50; /* Primary color */
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s, transform 0.2s;
-            margin-left: 10px; /* Space between buttons */
-        }
-
-        .modal-footer button:hover {
-            background-color: #45a049; /* Darker shade on hover */
-            transform: scale(1.05); /* Slightly enlarge on hover */
-        }
-
-        .close {
-            cursor: pointer;
-            font-size: 1.5rem;
-            color: #aaa;
-        }
-
-        .close:hover {
-            color: #000; /* Change color on hover */
-        }
-
-        /* User Details Panel */
-        .user-details {
-            display: none;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .stat-card {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 4px;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: var(--primary-color);
-        }
-
-        .stat-label {
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        .large-modal {
-            width: 90%;
-            max-width: 1200px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .tabs-container {
-            margin-top: 20px;
-        }
-
-        .tab-btn {
-            padding: 10px 20px;
-            border: none;
-            background: #f0f0f0;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-
-        .tab-btn.active {
-            background: #4CAF50;
-            color: white;
-        }
-
-        .tab-content {
-            background: white;
-            padding: 20px;
-            border-radius: 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .data-table th, .data-table td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .data-table th {
-            background-color: #f5f5f5;
-        }
-
-        .action-btn {
-            padding: 6px 12px;
-            margin: 0 4px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .edit-btn { background: #2196F3; color: white; }
-        .delete-btn { background: #f44336; color: white; }
-
-        .loading {
-            text-align: center;
-            padding: 20px;
-            font-style: italic;
-            color: #666;
-        }
-
-        .error {
-            color: #f44336;
-            padding: 20px;
-            text-align: center;
-        }
-
-        .table-actions {
-            margin-bottom: 20px;
-        }
-
-        /* Edit Post Modal Styles */
-        #editPostModal {
+        /* Popup Styles */
+        .popup {
             display: none; /* Hidden by default */
             position: fixed;
-            z-index: 1000;
+            z-index: 1;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
-            overflow: auto;
-            background-color: rgba(0, 0, 0, 0.6); /* Semi-transparent background */
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
         }
 
-        #editPostModal .modal-content {
-            background-color: #fff;
-            margin: 10% auto;
+        .popup-content {
+            background-color: white;
             padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); /* Modern shadow */
-            max-width: 500px; /* Maximum width */
-            width: 90%; /* Responsive width */
-            transition: all 0.3s ease; /* Smooth transitions */
-            animation: fadeIn 0.3s ease;
+            border-radius: 5px;
+            width: 400px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         }
 
-        #editPostModal .modal-content h2 {
-            font-size: 1.8rem;
-            color: var(--primary-color); /* Matches theme primary color */
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        #editPostModal .modal-content label {
-            display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #333;
-        }
-
-        #editPostModal .modal-content input {
-            width: 100%;
-            padding: 10px 12px;
+        .form-input {
             margin-bottom: 15px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 1rem;
-            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
-            transition: border-color 0.2s, box-shadow 0.2s;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 90%;
         }
 
-        #editPostModal .modal-content input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 8px rgba(76, 175, 80, 0.2); /* Light green glow */
-            outline: none;
-        }
-
-        #editPostModal .modal-content button {
-            display: inline-block;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: background-color 0.3s, transform 0.2s;
-            margin-top: 10px;
-        }
-
-        #editPostModal .modal-content button[type="submit"] {
-            background-color: var(--primary-color);
-            color: white;
-        }
-
-        #editPostModal .modal-content button[type="submit"]:hover {
-            background-color: var(--secondary-color);
-            transform: translateY(-2px); /* Hover effect */
-        }
-
-        #editPostModal .modal-content button[type="button"] {
-            background-color: var(--danger-color);
-            color: white;
-        }
-
-        #editPostModal .modal-content button[type="button"]:hover {
-            background-color: #c82333; /* Slightly darker on hover */
-            transform: translateY(-2px);
-        }
-
-        #editPostModal .modal-content .close {
-            position: absolute;
-            top: 15px;
-            right: 20px;
-            font-size: 1.5rem;
-            color: #aaa;
-            cursor: pointer;
-            transition: color 0.3s;
-        }
-
-        #editPostModal .modal-content .close:hover {
-            color: #333;
-        }
-
-        /* Fade-in animation for modal */
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: scale(0.95);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
-        }
-
-        /* Container for Posts Off */
-        #postsOffContainer {
-            display: none; /* Initially hidden */
-            margin-top: 20px; /* Space from the navbar */
-        }
-
-        /* Table styles */
-        .data-table {
-            width: 100%; /* Full width */
-            border-collapse: collapse; /* Remove gaps between cells */
-            margin-top: 20px; /* Space above the table */
-        }
-
-        .data-table th, .data-table td {
-            padding: 12px; /* Padding for cells */
-            text-align: left; /* Align text to the left */
-            border-bottom: 1px solid #ddd; /* Bottom border for rows */
-        }
-
-        .data-table th {
-            background-color: var(--primary-color); /* Header background color */
-            color: white; /* Header text color */
-        }
-
-        .data-table tr:hover {
-            background-color: rgba(0, 0, 0, 0.05); /* Highlight row on hover */
-        }
-
-        /* Action button styles */
         .action-btn {
-            background-color: var(--primary-color);
+            background-color: #4CAF50;
             color: white;
+            padding: 10px;
             border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
+            border-radius: 5px;
             cursor: pointer;
-            transition: background-color 0.3s;
         }
 
         .action-btn:hover {
-            background-color: var(--secondary-color); /* Darker shade on hover */
+            background-color: #45a049;
         }
 
-        .delete-btn {
-            background-color: var(--danger-color);
+        .close-btn {
+            background-color: #f44336;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            width: 100%;
         }
 
-        .delete-btn:hover {
-            background-color: #c82333; /* Darker shade on hover */
+        /* Navbar & Table Styles */
+        .navbar {
+            background-color: #333;
+            color: white;
+            padding: 15px;
+        }
+
+        .navbar .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar .nav-links a {
+            color: white;
+            padding: 10px;
+            text-decoration: none;
+            margin: 0 10px;
+            border-radius: 4px;
+        }
+
+        .navbar .nav-links a:hover {
+            background-color: #575757;
+        }
+
+        #usersTable {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        #usersTable th, #usersTable td {
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+
+        #usersTable th {
+            background-color: #f2f2f2;
+        }
+
+        #usersTable tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        #usersTable tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        #usersTable td button {
+            margin: 5px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #f44336;
+            border: none;
+            color: white;
         }
     </style>
 </head>
-
 <body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-brand">Admin Dashboard</div>
-            <div class="nav-links">
-                <a href="/admin" class="nav-link active">Users</a>
-                <a href="/logout"class="nav-link logout-btn">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
-            </div>
+
+<nav class="navbar">
+    <div class="nav-container">
+        <div class="nav-brand">FB Manager</div>
+        <div class="nav-links">
+            <a href="/posts" class="nav-link">Posts</a>
+            <a href="/posts-off" class="nav-link">Posts Off</a>
+            <a href="/cookies" class="nav-link">Cookies</a>
+            <a href="/proxies" class="nav-link">Proxies</a>
+            <a href="/comments" class="nav-link">Comments</a>
+            <a href="/admin" class="nav-link" id="admin-btn" style="background-color: #4CAF50;">Admin</a>
+            <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
         </div>
-    </nav>
+    </div>
+</nav>
 
-    <div class="container">
-        <div class="dashboard-header">
-            <h1>User Management</h1>
-            <button class="add-user-btn" onclick="openAddUserModal()">
-                <i class="fas fa-plus"></i> Add New User
-            </button>
+<div class="container">
+    <h2>Quản lý người dùng</h2>
+
+    <!-- Button to open form popup -->
+    <button class="action-btn" onclick="openPopup()">Thêm người dùng</button>
+
+    <!-- Popup form -->
+    <div class="popup" id="popupForm">
+        <div class="popup-content">
+            <h3>Thêm người dùng</h3>
+            <input type="text" class="form-input" id="newUsername" placeholder="Nhập tên người dùng...">
+            <input type="password" class="form-input" id="newPassword" placeholder="Nhập mật khẩu...">
+            
+            <input type="text" class="form-input" id="newPermission" placeholder="Nhập quyền (admin/user)...">
+            
+            <input type="number" class="form-input" id="newLinkScanLimit" placeholder="Nhập Link Scan Limit..." min="0">
+            <input type="number" class="form-input" id="newLinkFollowLimit" placeholder="Nhập Link Follow Limit..." min="0">
+            <input type="number" class="form-input" id="newLinkHideLimit" placeholder="Nhập Link Hide Limit..." min="0">
+            
+            <input type="number" class="form-input" id="newExpireDays" placeholder="Nhập số ngày hết hạn..." min="1">
+            
+            <button class="action-btn resume-btn" onclick="addUser()">Thêm người dùng</button>
+            <button class="close-btn" onclick="closePopup()">Đóng</button>
         </div>
-        <div id="addPostForm">
-            <input type="text" id="postName_inp" placeholder="Enter post name">
-            <input type="text" id="postUrl_inp" placeholder="Enter post URL">
-            <button onclick="addPost()">Add Post</button>
-        </div>
+    </div>
 
-        <div class="tabs">
-            <div class="tab active" onclick="switchMainTab('users')">Users</div>
-            <div class="tab" onclick="switchMainTab('posts')">Posts</div>
-            <div class="tab" onclick="switchMainTab('posts-off')">Posts Off</div>
-            <div class="tab" onclick="switchMainTab('comments')">Comments</div>
-        </div>
+    <!-- Bảng hiển thị danh sách người dùng -->
+    <table id="usersTable">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Tên người dùng</th>
+                <th>Quyền</th>
+                <th>Link Scan Limit</th>
+                <th>Link Follow Limit</th>
+                <th>Link Hide Limit</th>
+                <th>Ngày hết hạn</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
 
-        <div id="mainContent">
-            <div id="postsContainer" style="display: none;">
-                <!-- Only show this when Posts tab is active -->
+<script>
+    // Mở popup form
+    function openPopup() {
+        document.getElementById('popupForm').style.display = 'flex';
+    }
 
-                <div class="container">
-                    <h1>Quản Lý Bài Viết</h1>
+    // Đóng popup form
+    function closePopup() {
+        document.getElementById('popupForm').style.display = 'none';
+    }
+</script>
 
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        fetchUsers();
+        setInterval(fetchUsers, 20000); // Cập nhật thông tin người dùng mỗi 20 giây
+    });
 
-                    <div class="table-wrapper">
-                        <table id="postsTable">
-                            <thead>
-                                <tr>
-                                    <th>STT</th>
-                                    <th>Tên Bài Viết</th>
-                                    <th>URL</th>
-                                    <th>Trạng Thái</th>
-                                    <th>Hành Động</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Dữ liệu bài viết sẽ được thêm vào đây -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Add/Edit User Modal -->
-        <div id="userModal" class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2 id="modalTitle">Add New User</h2>
-                    <span class="close">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <form id="userForm">
-                        <div class="form-group">
-                            <label for="username">Username</label>
-                            <input type="text" id="username" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="password">Password</label>
-                            <input type="password" id="password" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label for="scanLimit">Scan Limit</label>
-                            <input type="number" id="scanLimit" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="followLimit">Follow Limit</label>
-                            <input type="number" id="followLimit" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="hideLimit">Hide Limit</label>
-                            <input type="number" id="hideLimit" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="expireDays">Expire Days</label>
-                            <input type="number" id="expireDays" class="form-control" required>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="action-btn" onclick="closeModal()">Cancel</button>
-                    <button type="button" class="action-btn add-user-btn" onclick="saveUser()">Save</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Add this to your existing HTML -->
-        <div id="userDetailsModal" class="modal">
-            <div class="modal-content large-modal">
-                <span class="close" onclick="closeUserDetailsModal()">&times;</span>
-                <div class="modal-header">
-                    <h2 id="userDetailsTitle">User Details</h2>
-                </div>
-                <div class="modal-body">
-                    <div class="user-info-section">
-                        <h3>User Information</h3>
-                        <div id="userInfo"></div>
-                    </div>
-                    <div class="tabs-container">
-                        <div class="tabs">
-                            <button class="tab-btn active" onclick="switchTab('posts')">Active Posts</button>
-                            <button class="tab-btn" onclick="switchTab('stopped')">Stopped Posts</button>
-                            <button class="tab-btn" onclick="switchTab('comments')">Comments</button>
-                        </div>
-                        <div id="tabContent" class="tab-content"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Edit Post Modal -->
-        <div id="editPostModal" style="display:none;">
-            <div class="modal-content">
-                <span class="close" onclick="closeEditPostModal()">&times;</span>
-                <h2>Edit Post</h2>
-                <form id="editPostForm">
-                    <label for="editPostName">Post Name:</label>
-                    <input type="text" id="editPostName" required>
-                    <label for="editPostUrl">Post URL:</label>
-                    <input type="text" id="editPostUrl" required>
-                    <label for="editPostDelay">Delay:</label>
-                    <input type="number" id="editPostDelay" required>
-                    <button type="submit">Save Changes</button>
-                    <button type="button" onclick="stopPost()">Stop Post</button>
-                </form>
-            </div>
-        </div>
-
-        <script>
-            async function addPost() {
-                const postName_inp = document.getElementById('postName_inp').value.trim();
-                const postUrl_inp = document.getElementById('postUrl_inp').value.trim();
-    
-                const username = localStorage.getItem('username'); // Lấy username từ localStorage
-    
-                if (!postName_inp || !postUrl_inp) {
-                    alert('Please fill in Post Name and Post URL.');
-                    return;
-                }
-    
-                try {
-                    const response = await fetch('/api/posts/add', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            post_name: postName_inp,
-                            post_url: postUrl_inp,
-                            username: username
-                        })
-                    });
-    
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        alert('Post added successfully');
-                        document.getElementById('postName_inp').value = '';
-                        document.getElementById('postUrl_inp').value = '';
-                        fetchUserPosts(); // Gọi lại API để cập nhật danh sách
-                    } else {
-                        alert('Failed to add post: ' + data.error);
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('Failed to add post. Please try again.');
-                }
-            }
-    
-    
-            let currentEditUsername = null;
-            let currentTab = 'users';
-            let currentUserData = null;
-    
-            // Thêm event listener khi trang load
-            document.addEventListener('DOMContentLoaded', function() {
-                fetchPosts(); // Fetch posts when the page loads
-                // Load users tab by default
-                switchMainTab('users');
+    async function fetchUsers() {
+        try {
+            const response = await fetch('/api/admin/users', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
             });
-    
-            function checkAuth() {
-                const token = localStorage.getItem('token');
-                if (!token) {
-                    console.error('No authentication token found');
-                    document.getElementById('mainContent').innerHTML = `
-                        <div class="error">
-                            Authentication error. Please log in again.
-                        </div>
-                    `;
-                    return false;
-                }
-                return true;
-            }
-    
-            async function fetchWithAuth(url, options = {}) {
-                const token = localStorage.getItem('token');
+            const data = await response.json();
+            populateUsers(data.users);
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        }
+    }
 
-                if (!token) {
-                    console.error('No token found in localStorage');
-                    throw new Error('Authentication token is missing');
-                }
+    function populateUsers(users) {
+        const tbody = document.querySelector('#usersTable tbody');
+        tbody.innerHTML = '';
 
-                try {
-                    const response = await fetch(url, {
-                        ...options,
-                        headers: {
-                            'Content-Type': 'application/json', // Ensure Content-Type is JSON
-                            ...options.headers, // Merge with any additional headers
-                            'Authorization': `Bearer ${token}` // Add authorization token
-                        }
-                    });
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8">Chưa có người dùng nào</td></tr>';
+            return;
+        }
 
-                    console.log(`API Response (${url}):`, response.status);
+        const currentTime = Math.floor(Date.now() / 1000); // Lấy thời gian hiện tại tính bằng giây (Unix timestamp)
 
-                    // If the response is not OK (status >= 400), attempt to parse the error
-                    if (!response.ok) {
-                        let errorData = {};
-                        try {
-                            errorData = await response.json();
-                        } catch {
-                            console.error(`Failed to parse error response from ${url}`);
-                        }
-                        console.error(`API Error (${url}):`, errorData);
-                        throw new Error(errorData.error || 'API request failed');
-                    }
+        users.forEach((user, index) => {
+            // Tính số ngày còn lại từ expire_time
+            const expireTime = user.expire_time;
+            const timeDiffInSeconds = expireTime - currentTime;
+            const daysRemaining = Math.floor(timeDiffInSeconds / (60 * 60 * 24)); // Chuyển đổi thành số ngày
 
-                    // Return parsed JSON if response is OK
-                    return await response.json();
-                } catch (error) {
-                    console.error(`Fetch Error (${url}):`, error);
-                    throw error;
-                }
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${index + 1}</td>
+                <td>${user.username}</td>
+                <td>${user.permission}</td>
+                <td>${user.link_scan_limit}</td>
+                <td>${user.link_follow_limit}</td>
+                <td>${user.link_hide_limit}</td>
+                <td>${daysRemaining} ngày nữa</td>
+                <td><button class="delete-btn" onclick="deleteUser(${user.id})">Xóa</button></td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+
+    function addUser() {
+        const username = document.getElementById('newUsername').value;
+        const password = document.getElementById('newPassword').value;
+        const permission = document.getElementById('newPermission').value;
+        const linkScanLimit = document.getElementById('newLinkScanLimit').value;
+        const linkFollowLimit = document.getElementById('newLinkFollowLimit').value;
+        const linkHideLimit = document.getElementById('newLinkHideLimit').value;
+        const expireDays = document.getElementById('newExpireDays').value;
+
+        // Kiểm tra dữ liệu nhập
+        if (!username || !password || !permission || !linkScanLimit || !linkFollowLimit || !linkHideLimit || !expireDays) {
+            alert('Vui lòng điền đầy đủ thông tin.');
+            return;
+        }
+
+        const data = {
+            username: username,
+            password: password,
+            link_scan_limit: linkScanLimit,
+            link_follow_limit: linkFollowLimit,
+            link_hide_limit: linkHideLimit,
+            expire_days: expireDays
+        };
+
+        fetch('/api/admin/users', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Thêm người dùng thành công!');
+                // Xử lý sau khi thêm người dùng thành công, ví dụ là reload dữ liệu người dùng.
+            } else {
+                alert('Thêm người dùng thất bại: ' + data.error);
             }
-    
-            async function fetchUsers() {
-                try {
-                    const response = await fetchWithAuth('/api/admin/users');
-                    if (response.ok) {
-                        const data = await response.json();
-                        displayUsers(data.users);
-                    } else {
-                        throw new Error('Failed to fetch users');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    document.getElementById('mainContent').innerHTML = `<div class="error">Error: ${error.message}</div>`;
-                }
-            }
-    
-            async function viewUserDetails(username) {
-                try {
-                    const response = await fetchWithAuth(`/api/admin/user-details/${username}`);
-                    const data = await response.json();
-    
-                    if (response.ok) {
-                        currentUserData = data;
-                        showUserDetailsModal(data);
-                    } else {
-                        alert(data.error || 'Failed to load user details');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('Failed to load user details');
-                }
-            }
-    
-            function showUserDetailsModal(data) {
-                const modal = document.getElementById('userDetailsModal');
-                const userInfo = document.getElementById('userInfo');
-    
-                // Display user info
-                userInfo.innerHTML = `
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <label>Username:</label>
-                            <span>${data.user.username}</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Scan Limit:</label>
-                            <span>${data.user.link_scan_limit}</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Follow Limit:</label>
-                            <span>${data.user.link_follow_limit}</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Hide Limit:</label>
-                            <span>${data.user.link_hide_limit}</span>
-                        </div>
-                        <div class="info-item">
-                            <label>Expires:</label>
-                            <span>${new Date(data.user.expire_time * 1000).toLocaleDateString()}</span>
-                        </div>
-                    </div>
-                `;
-    
-                // Show first tab by default
-                switchTab('posts');
-                modal.style.display = 'block';
-            }
-    
-            function switchTab(tabName) {
-                if (!currentUserData) return;
-    
-                const tabContent = document.getElementById('tabContent');
-                const tabs = document.querySelectorAll('.tab-btn');
-    
-                // Update active tab
-                tabs.forEach(tab => {
-                    tab.classList.remove('active');
-                    if (tab.textContent.toLowerCase().includes(tabName)) {
-                        tab.classList.add('active');
-                    }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Có lỗi xảy ra khi thêm người dùng.');
+        });
+    }
+
+    async function deleteUser(userId) {
+        if (confirm('Bạn có chắc chắn muốn xóa người dùng này?')) {
+            try {
+                const response = await fetch(`/api/admin/delete-user/${userId}`, {
+                    method: 'DELETE'
                 });
-    
-                // Generate content based on tab
-                let content = '';
-                switch(tabName) {
-                    case 'posts':
-                        content = generateTableHTML(currentUserData.posts, [
-                            { key: 'post_name', label: 'Post Name' },
-                            { key: 'reaction_count', label: 'Reactions' },
-                            { key: 'comment_count', label: 'Comments' },
-                            { key: 'time_created', label: 'Created', format: timestamp => new Date(timestamp * 1000).toLocaleString() }
-                        ]);
-                        break;
-                    case 'stopped':
-                        content = generateTableHTML(currentUserData.stopped_posts, [
-                            { key: 'post_name', label: 'Post Name' },
-                            { key: 'reaction_count', label: 'Reactions' },
-                            { key: 'comment_count', label: 'Comments' },
-                            { key: 'stopped_time', label: 'Stopped', format: timestamp => new Date(timestamp * 1000).toLocaleString() }
-                        ]);
-                        break;
-                    case 'comments':
-                        content = generateTableHTML(currentUserData.comments, [
-                            { key: 'author_name', label: 'Author' },
-                            { key: 'content', label: 'Content' },
-                            { key: 'created_time', label: 'Created', format: timestamp => new Date(timestamp * 1000).toLocaleString() }
-                        ]);
-                        break;
-                }
-    
-                tabContent.innerHTML = content;
-            }
-    
-            function generateTableHTML(data, columns) {
-                if (!data || data.length === 0) {
-                    return '<p>No data available</p>';
-                }
-    
-                return `
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                ${columns.map(col => `<th>${col.label}</th>`).join('')}
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${data.map(item => `
-                                <tr>
-                                    ${columns.map(col => `
-                                        <td>${col.format ? col.format(item[col.key]) : item[col.key]}</td>
-                                    `).join('')}
-                                    <td>
-                                        <button class="action-btn edit-btn" onclick="editItem('${item.id}')">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="action-btn delete-btn" onclick="deleteItem('${item.id}')">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-            }
-    
-            function closeUserDetailsModal() {
-                const modal = document.getElementById('userDetailsModal');
-                modal.style.display = 'none';
-                currentUserData = null;
-            }
-    
-            // Close modal when clicking outside
-            window.onclick = function(event) {
-                const modal = document.getElementById('userDetailsModal');
-                if (event.target == modal) {
-                    closeUserDetailsModal();
-                }
-            }
-    
-            function switchTab(tab) {
-                currentTab = tab;
-                document.querySelectorAll('.tab').forEach(t => {
-                    t.classList.remove('active');
-                });
-                event.target.classList.add('active');
-                // Implement tab switching logic
-            }
-    
-            async function handleLogout() {
-                try {
-                    const response = await fetchWithAuth('/api/logout', {
-                        method: 'POST'
-                    });
-    
-                    if (response.ok) {
-                        localStorage.clear();
-                        window.location.href = '/admin/login';
-                    }
-                } catch (error) {
-                    console.error('Logout error:', error);
-                }
-            }
-    
-            function openAddUserModal() {
-                const modal = document.getElementById('userModal');
-                const modalTitle = document.getElementById('modalTitle');
-                const form = document.getElementById('userForm');
-    
-                modalTitle.textContent = 'Add New User';
-                form.reset();  // Reset form fields
-                modal.style.display = 'block';
-            }
-    
-            function openEditUserModal(username) {
-                currentEditUsername = username;
-                document.getElementById('modalTitle').textContent = 'Edit User';
-                document.getElementById('username').value = username;
-                document.getElementById('username').readOnly = true;
-                document.getElementById('password').required = false;
-                // Fetch and populate user data
-                fetchUserData(username);
-                document.getElementById('userModal').style.display = 'block';
-            }
-    
-            async function fetchUserData(username) {
-                try {
-                    const response = await fetchWithAuth(`/api/admin/users/${username}`);
-                    if (response.ok) {
-                        const user = await response.json();
-                        document.getElementById('scanLimit').value = user.link_scan_limit;
-                        document.getElementById('followLimit').value = user.link_follow_limit;
-                        document.getElementById('hideLimit').value = user.link_hide_limit;
-                        document.getElementById('expireDays').value = Math.ceil((user.expire_time - Date.now()/1000) / (24*60*60));
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                }
-            }
-    
-            async function saveUser() {
-                const formData = {
-                    username: document.getElementById('username').value,
-                    password: document.getElementById('password').value,
-                    link_scan_limit: parseInt(document.getElementById('scanLimit').value),
-                    link_follow_limit: parseInt(document.getElementById('followLimit').value),
-                    link_hide_limit: parseInt(document.getElementById('hideLimit').value),
-                    expire_days: parseInt(document.getElementById('expireDays').value)
-                };
-    
-                try {
-                    const response = await fetchWithAuth('/api/admin/users', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify(formData)
-                    });
-    
-                    const data = await response.json();
-                    console.log('Response:', data); // Debug log
-    
-                    if (data.success) {  // Thay đổi điều kiện kiểm tra
-                        closeModal();
-                        await fetchUsers();  // Đợi fetchUsers hoàn thành
-                        alert('User added successfully');
-                    } else {
-                        alert(data.error || 'Failed to add user');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('An error occurred while adding user');
-                }
-            }
-    
-            function closeModal() {
-                const modal = document.getElementById('userModal');
-                modal.style.display = 'none';
-                // Reset form
-                document.getElementById('userForm').reset();
-            }
-    
-            async function deleteUser(username) {
-                if (!confirm(`Are you sure you want to delete user ${username}?`)) {
-                    return;
-                }
-    
-                try {
-                    const response = await fetchWithAuth(`/api/admin/users/${username}`, {
-                        method: 'DELETE'
-                    });
-    
-                    if (response.ok) {
-                        fetchUsers();
-                    } else {
-                        const data = await response.json();
-                        alert(data.error || 'Failed to delete user');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('Failed to delete user');
-                }
-            }
-    
-            // Close modal when clicking on X or outside
-            document.querySelector('.close').onclick = function() {
-                document.getElementById('userModal').style.display = 'none';
-            }
-    
-            window.onclick = function(event) {
-                if (event.target == document.getElementById('userModal')) {
-                    document.getElementById('userModal').style.display = 'none';
-                }
-            }
-    
-            // Helper function for authenticated fetch
-            function fetchWithAuth(url, options = {}) {
-                const token = localStorage.getItem('token');
-                return fetch(url, {
-                    ...options,
-                    headers: {
-                        ...options.headers,
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-            }
-    
-            // Hiển thị danh sách users
-            function displayUsers(users) {
-                const content = `
-                    <div class="table-actions">
-                        <button onclick="openAddUserModal()" class="action-btn">
-                            <i class="fas fa-plus"></i> Add User
-                        </button>
-                    </div>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Username</th>
-                                <th>Scan Limit</th>
-                                <th>Follow Limit</th>
-                                <th>Hide Limit</th>
-                                <th>Expire Date</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${users.map(user => `
-                                <tr>
-                                    <td>${user.username}</td>
-                                    <td>${user.link_scan_limit}</td>
-                                    <td>${user.link_follow_limit}</td>
-                                    <td>${user.link_hide_limit}</td>
-                                    <td>${new Date(user.expire_time * 1000).toLocaleDateString()}</td>
-                                    <td>
-                                        <button onclick="openEditUserModal('${user.username}')" class="action-btn edit-btn">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button onclick="deleteUser('${user.username}')" class="action-btn delete-btn">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                document.getElementById('mainContent').innerHTML = content;
-            }
-    
-            let refreshInterval; // Global variable to store the interval ID
 
-            async function switchMainTab(tab) {
-                if (!checkAuth()) return; // Kiểm tra authentication
+                const result = await response.json();
 
-                try {
-                    currentTab = tab;
-
-                    // Clear any existing interval
-                    if (refreshInterval) {
-                        clearInterval(refreshInterval);
-                    }
-
-                    // Remove active class from all tabs
-                    document.querySelectorAll('.tab').forEach(t => {
-                        t.classList.remove('active');
-                    });
-
-                    // Add active class to the clicked tab
-                    const activeTab = Array.from(document.querySelectorAll('.tab')).find(t => t.textContent.trim() === tab.charAt(0).toUpperCase() + tab.slice(1).replace('-', ' '));
-                    if (activeTab) {
-                        activeTab.classList.add('active');
-                    }
-
-                    // Load content based on the selected tab
-                    document.getElementById('mainContent').innerHTML = '<div class="loading">Loading...</div>';
-
-                    switch (tab) {
-                        case 'users':
-                            await fetchUsers();
-                            break;
-
-                        case 'posts':
-                            const username = localStorage['username']; // Replace with actual source of username
-                            if (!username) {
-                                throw new Error('Username not found');
-                            }
-
-                            const fetchAndDisplayPosts = async () => {
-                                try {
-                                    const postsResponse = await fetchWithAuth('/api/user/all-posts', { method: 'GET' });
-                                    if (postsResponse.ok) {
-                                        const data = await postsResponse.json();
-                                        displayPosts(data.posts);
-                                    } else {
-                                        console.error('Failed to fetch posts');
-                                    }
-                                } catch (err) {
-                                    console.error('Error fetching posts:', err);
-                                }
-                            };
-
-                            await fetchAndDisplayPosts(); // Initial fetch
-                            refreshInterval = setInterval(fetchAndDisplayPosts, 10000); // Auto-refresh every 10 seconds
-                            break;
-
-                            case 'posts-off':
-                                const fetchAndDisplayStoppedPosts = async () => {
-                                    try {
-                                        const stoppedPostsResponse = await fetchWithAuth('/api/admin/all-stopped-posts', { method: 'GET' });
-                                        if (stoppedPostsResponse.ok) {
-                                            const data = await stoppedPostsResponse.json();
-                                            // Sửa key 'data.posts' thành 'data.stopped_posts'
-                                            displayStoppedPosts(data.stopped_posts);
-                                        } else {
-                                            console.error('Failed to fetch stopped posts');
-                                        }
-                                    } catch (err) {
-                                        console.error('Error fetching stopped posts:', err);
-                                    }
-                                };
-
-                                await fetchAndDisplayStoppedPosts(); // Initial fetch
-                                refreshInterval = setInterval(fetchAndDisplayStoppedPosts, 10000); // Auto-refresh every 10 seconds
-                                break;
-
-
-                        case 'comments':
-                            const fetchAndDisplayComments = async () => {
-                                try {
-                                    const commentsResponse = await fetchWithAuth('/api/user/all-comments', { method: 'GET' });
-                                    if (commentsResponse.ok) {
-                                        const data = await commentsResponse.json();
-                                        displayComments(data.comments);
-                                    } else {
-                                        console.error('Failed to fetch comments');
-                                    }
-                                } catch (err) {
-                                    console.error('Error fetching comments:', err);
-                                }
-                            };
-
-                            await fetchAndDisplayComments(); // Initial fetch
-                            refreshInterval = setInterval(fetchAndDisplayComments, 10000); // Auto-refresh every 10 seconds
-                            break;
-
-                        default:
-                            console.error('Invalid tab');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    document.getElementById('mainContent').innerHTML = `<div class="error">Error: ${error.message}</div>`;
-                }
-            }
-    
-            async function displayPosts(posts) {
-                const timeAgo = (timestamp) => {
-                    const now = Date.now();
-                    const secondsAgo = Math.floor((now - timestamp * 1000) / 1000);
-
-                    const intervals = [
-                        { label: 'year', seconds: 31536000 },
-                        { label: 'month', seconds: 2592000 },
-                        { label: 'day', seconds: 86400 },
-                        { label: 'hour', seconds: 3600 },
-                        { label: 'minute', seconds: 60 },
-                        { label: 'second', seconds: 1 },
-                    ];
-
-                    for (const interval of intervals) {
-                        const count = Math.floor(secondsAgo / interval.seconds);
-                        if (count > 0) {
-                            return `${count} ${interval.label}${count > 1 ? 's' : ''} ago`;
-                        }
-                    }
-                    return 'just now';
-                };
-
-                const content = `
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Post Name</th>
-                                <th>Post URL</th>
-                                <th>Reaction Count</th>
-                                <th>Comment Count</th>
-                                <th>Delay (ms)</th>
-                                <th>Last Comment</th>
-                                <th>Time Created</th>
-                                <th>Status</th>
-                                <th>Username</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${posts.map(post => `
-                                <tr>
-                                    <td>${post.post_name}</td>
-                                    <td><a href="${post.post_url}" target="_blank">${post.post_url}</a></td>
-                                    <td>${post.reaction_count}</td>
-                                    <td>${post.comment_count}</td>
-                                    <td>${post.delay}</td>
-                                    <td>${timeAgo(post.last_comment)}</td>
-                                    <td>${new Date(post.time_created * 1000).toLocaleString()}</td>
-                                    <td>${post.status}</td>
-                                    <td>${post.username}</td>
-                                    <td>
-                                        <button onclick="openEditPostModal('${post.post_name}')" class="action-btn">Edit</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                document.getElementById('mainContent').innerHTML = content;
-            }
-
-            function displayStoppedPosts(posts) {
-                // Kiểm tra xem posts có phải là một mảng không
-                if (!Array.isArray(posts)) {
-                    console.error("Invalid posts data:", posts);
-                    document.getElementById('mainContent').innerHTML = "<p>No stopped posts available.</p>";
-                    return;
-                }
-
-                const content = `
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Post Name</th>
-                                <th>User</th>
-                                <th>URL</th>
-                                <th>Reactions</th>
-                                <th>Comments</th>
-                                <th>Last Comment</th>
-                                <th>Stopped Time</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${posts.map(post => `
-                                <tr>
-                                    <td>${post.post_name || "N/A"}</td>
-                                    <td>${post.username || "N/A"}</td>
-                                    <td><a href="${post.post_url || "#"}" target="_blank">View</a></td>
-                                    <td>${post.reaction_count || 0}</td>
-                                    <td>${post.comment_count || 0}</td>
-                                    <td>${post.last_comment ? new Date(post.last_comment * 1000).toLocaleString() : "N/A"}</td>
-                                    <td>${post.stopped_time ? new Date(post.stopped_time * 1000).toLocaleString() : "N/A"}</td>
-                                    <td>
-                                        <button onclick="resumePost('${post.post_name}')" class="action-btn">Resume</button>
-                                        <button onclick="deletePost('${post.post_name}')" class="action-btn delete-btn">Delete</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-
-                const contentElement = document.getElementById('mainContent');
-                if (contentElement) {
-                    contentElement.innerHTML = content;
+                if (result.success) {
+                    fetchUsers(); // Cập nhật lại danh sách người dùng
+                    alert('Đã xóa người dùng.');
                 } else {
-                    console.error('Element with ID "mainContent" not found.');
+                    alert('Có lỗi xảy ra. Vui lòng thử lại.');
                 }
+            } catch (error) {
+                console.error('Error deleting user:', error);
             }
+        }
+    }
+    if (localStorage['admin'] != 'admin') {
+        window.location.href = '/';
+    }
+</script>
 
-            function displayComments(comments) {
-                const timeAgo = (timestamp) => {
-                    const now = Date.now();
-                    const secondsAgo = Math.floor((now - timestamp * 1000) / 1000);
-
-                    const intervals = [
-                        { label: 'year', seconds: 31536000 },
-                        { label: 'month', seconds: 2592000 },
-                        { label: 'day', seconds: 86400 },
-                        { label: 'hour', seconds: 3600 },
-                        { label: 'minute', seconds: 60 },
-                        { label: 'second', seconds: 1 },
-                    ];
-
-                    for (const interval of intervals) {
-                        const count = Math.floor(secondsAgo / interval.seconds);
-                        if (count > 0) {
-                            return `${count} ${interval.label}${count > 1 ? 's' : ''} ago`;
-                        }
-                    }
-                    return 'just now';
-                };
-
-                const content = `
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Thời gian</th>
-                                <th>Comment ID</th>
-                                <th>Author Name</th>
-                                <th>Info</th>
-                                <th>Post ID</th>
-                                <th>Post Name</th>
-                                <th>Content</th>
-                                <th>Phone Number</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${comments.map(comment => `
-                                <tr>
-                                    <td>${timeAgo(comment.created_time)}</td>
-                                    <td>${comment.id}</td>
-                                    <td><a href="https://facebook.com/${comment.author_id}" target="_blank" rel="noopener noreferrer">${comment.author_name}</a></td>
-                                    <td>${comment.info}</td>
-                                    <td><a href="https://facebook.com/${comment.post_id}" target="_blank" rel="noopener noreferrer">${comment.post_id}</a></td>
-                                    <td>${comment.post_name}</td>
-                                    <td>
-                                        <span class="tooltip" title="${comment.content}">
-                                            ${comment.content.length > 50 ? comment.content.substring(0, 50) + "..." : comment.content}
-                                        </span>
-                                    </td>
-                                    <td>${comment.phone_number}</td>
-                                    <td>
-                                        <button onclick="deleteComment('${comment.id}')" class="action-btn delete-btn">
-                                            <i class="fas fa-trash"></i> Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
-                document.getElementById('mainContent').innerHTML = content;
-            }
-
-    
-    
-            async function openEditPostModal(postName) {
-                try {
-                    const response = await fetch(`/api/posts/${postName}`);
-                    const post = await response.json();
-    
-                    if (response.ok) {
-                        document.getElementById('editPostName').value = post.post_name;
-                        document.getElementById('editPostUrl').value = post.post_url;
-                        document.getElementById('editPostDelay').value = post.delay;
-                        document.getElementById('editPostModal').style.display = 'block';
-                    } else {
-                        alert(post.error);
-                    }
-                } catch (error) {
-                    console.error('Error fetching post details:', error);
-                }
-            }
-    
-            document.getElementById('editPostForm').addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const postName = document.getElementById('editPostName').value;
-                const postUrl = document.getElementById('editPostUrl').value;
-                const delay = document.getElementById('editPostDelay').value;
-    
-                try {
-                    const response = await fetch('/api/posts/edit', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            post_name: postName,
-                            post_url: postUrl,
-                            delay: delay
-                        })
-                    });
-    
-                    const result = await response.json();
-                    if (result.success) {
-                        alert('Post updated successfully');
-                        closeEditPostModal();
-                        // Optionally refresh the posts list
-                    } else {
-                        alert(result.error);
-                    }
-                } catch (error) {
-                    console.error('Error updating post:', error);
-                }
-            });
-    
-            function closeEditPostModal() {
-                document.getElementById('editPostModal').style.display = 'none';
-            }
-    
-            async function stopPost() {
-                const postName = document.getElementById('editPostName').value;
-                const username = localStorage['username']
-    
-                if (confirm(`Are you sure you want to stop the post "${postName}"?`)) {
-                    try {
-                        const response = await fetch('/api/posts/stop', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ post_name: postName , username: username})
-                        });
-    
-                        const result = await response.json();
-                        if (result.message) {
-                            alert('Stop Successfully!');
-                            closeEditPostModal();
-                            await fetchPosts();
-                            showPostsOff();
-                        } else {
-                            alert(result.error);
-                        }
-                    } catch (error) {
-                        console.error('Error stopping post:', error);
-                    }
-                }
-            }
-    
-            async function resumePost(postName) {
-                try {
-                    const username = localStorage['username']
-                    const response = await fetch('/api/posts/resume', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ post_name: postName , username: username})
-                    });
-    
-                    const result = await response.json();
-                    if (result.message == 'Post successfully resumed!') {
-                        alert(result.message);
-                        showPostsOff(); // Refresh the Posts Off tab
-                    } else {
-                        alert(result.error);
-                    }
-                } catch (error) {
-                    console.error('Error resuming post:', error);
-                }
-            }
-    
-            async function deletePost(postName) {
-                try {
-                    const response = await fetch('/api/posts/delete', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ post_name: postName })
-                    });
-    
-                    const result = await response.json();
-                    if (result.success) {
-                        alert('Post deleted successfully');
-                        showPostsOff(); // Refresh the Posts Off tab
-                    } else {
-                        alert(result.error);
-                    }
-                } catch (error) {
-                    console.error('Error deleting post:', error);
-                }
-            }
-    
-            async function showPostsOff() {
-                try {
-                    // Clear existing content
-                    document.getElementById('mainContent').innerHTML = `
-                        <div class="table-responsive">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Post Name</th>
-                                        <th>Post URL</th>
-                                        <th>Reaction Count</th>
-                                        <th>Comment Count</th>
-                                        <th>Delay</th>
-                                        <th>Stopped Time</th>
-                                        <th>Status</th>
-                                        <th>Username</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="stoppedPostsBody">
-                                    <!-- Stopped posts will be populated here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    `;
-    
-                    const response = await fetchWithAuth('/api/posts/off');
-                    if (!response.ok) {
-                        throw new Error('Failed to fetch stopped posts');
-                    }
-    
-                    const data = await response.json();
-                    const stoppedPostsBody = document.getElementById('stoppedPostsBody');
-                    
-                    if (data.stopped_posts && data.stopped_posts.length > 0) {
-                        stoppedPostsBody.innerHTML = data.stopped_posts.map(post => `
-                            <tr>
-                                <td>${post.post_name}</td>
-                                <td><a href="${post.post_url}" target="_blank">${post.post_url}</a></td>
-                                <td>${post.reaction_count}</td>
-                                <td>${post.comment_count}</td>
-                                <td>${post.delay}</td>
-                                <td>${new Date(post.stopped_time * 1000).toLocaleString()}</td>
-                                <td>${post.status}</td>
-                                <td>${post.username}</td>
-                                <td>
-                                    <button onclick="resumePost('${post.post_name}')" class="action-btn">
-                                        <i class="fas fa-play"></i> Resume
-                                    </button>
-                                    <button onclick="deletePost('${post.post_name}')" class="action-btn delete-btn">
-                                        <i class="fas fa-trash"></i> Delete
-                                    </button>
-                                </td>
-                            </tr>
-                        `).join('');
-                    } else {
-                        stoppedPostsBody.innerHTML = `
-                            <tr>
-                                <td colspan="9" class="text-center">No stopped posts found</td>
-                            </tr>
-                        `;
-                    }
-                } catch (error) {
-                    console.error('Error loading stopped posts:', error);
-                    document.getElementById('mainContent').innerHTML = `
-                        <div class="error">Error loading stopped posts: ${error.message}</div>
-                    `;
-                }
-            }
-    
-            async function fetchPosts() {
-                const response = await fetch('/api/posts');
-                const data = await response.json();
-    
-                const postsBody = document.getElementById('postsBody'); // Assuming you have a tbody with this ID
-                postsBody.innerHTML = ''; // Clear existing rows
-    
-                data.posts.forEach(post => {
-                    postsBody.innerHTML += `
-                        <tr>
-                            <td>${post.post_name}</td>
-                            <td><a href="${post.post_url}" target="_blank">${post.post_url}</a></td>
-                            <td>${post.reaction_count}</td>
-                            <td>${post.comment_count}</td>
-                            <td>${post.delay}</td>
-                            <td>${new Date(post.time_created * 1000).toLocaleString()}</td>
-                            <td>${post.status}</td>
-                            <td>${post.username}</td>
-                            <td>
-                                <button onclick="openEditPostModal('${post.post_name}')" class="action-btn">Edit</button>
-                                <button onclick="stopPost('${post.post_name}')" class="action-btn delete-btn">Stop</button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            }
-        </script>
 </body>
-
 </html>

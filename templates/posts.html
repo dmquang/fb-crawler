@@ -322,7 +322,10 @@
             <div class="nav-links">
                 <a href="/posts" class="nav-link active">Posts</a>
                 <a href="/posts-off" class="nav-link">Posts Off</a>
+                <a href="/cookies" class="nav-link">Cookies</a>
+                <a href="/proxies" class="nav-link">Proxies</a>
                 <a href="/comments" class="nav-link">Comments</a>
+                <a href="/admin" class="nav-link" id="admin-btn" style="background-color: #4CAF50;">Admin</a>
                 <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
             </div>
         </div>
@@ -627,4 +630,10 @@
     </script>
 
 </body>
+<script>
+    const isadmin = localStorage['username']
+    if (isadmin != 'admin') {
+        document.getElementById('admin-btn').style.display = 'none';
+    }
+</script>
 </html>
