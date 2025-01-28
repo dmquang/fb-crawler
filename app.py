@@ -8,6 +8,7 @@ from functools import wraps
 import pandas as pd
 from io import BytesIO
 from flask import Response
+import random
 from datetime import datetime, timedelta
 
 # Khởi tạo Flask app
@@ -506,9 +507,13 @@ def add_post():
         post_name = data['post_name']
         post_url = data['post_url']
         username = data['username']  # Lấy username từ dữ liệu gửi lên
-        
+        # Kết nối với cơ sở dữ liệu
+        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+        proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
+        proxy = random.choice(proxies)[0]
+
         # Tạo đối tượng FacebookCrawler để lấy thông tin bài viết
-        fb = FacebookCrawler(url=post_url)
+        fb = FacebookCrawler(url=post_url, proxy=proxy)
         
         # Lấy thông tin từ FacebookCrawler
         post_id = fb.id  # Lấy post_id từ đối tượng FacebookCrawler
@@ -519,8 +524,7 @@ def add_post():
         status = 'active'
         time_created = int(time.time())  # Thời gian hiện tại
         
-        # Kết nối với cơ sở dữ liệu
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+        
         
         # Thêm bài viết vào cơ sở dữ liệu
         insert_sql = f"""
@@ -774,12 +778,12 @@ def update_user(username):
         return jsonify({'error': str(e)}), 500
 
 # API xóa người dùng
-@app.route('/api/admin/users/<username>', methods=['DELETE'])
-@admin_required
-def delete_user(username):
+@app.route('/api/admin/delete-user/', methods=['DELETE'])
+def delete_user():
     try:
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='admin')
-        
+        username = request.get_json()['username']
+
         # Kiểm tra xem người dùng có tồn tại không
         check_sql = "SELECT COUNT(*) FROM users WHERE username = %s"
         result = db.execute_query(check_sql, (username,))

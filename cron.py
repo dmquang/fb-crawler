@@ -165,9 +165,9 @@ class CronJob:
             logging.error(f"Error inserting comment {comment_id}: {e}")
 
     def _get_proxy(self, username):
-        proxies = self.db.fetch_data('proxies', condition=f"username = '{username}' AND status = 'active'") if username else []
+        proxies = self.db.fetch_data('proxies', condition=f"username = '{username}' AND status = 'Active'") if username else []
         if not proxies:
-            proxies = self.db.fetch_data('proxies', condition="username = 'admin' AND status = 'active'")
+            proxies = self.db.fetch_data('proxies', condition="username = 'admin' AND status = 'Active'")
         return random.choice(proxies)[0] if proxies else None
 
     def _checkCookie(self, cookie):

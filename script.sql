@@ -9,13 +9,6 @@ CREATE TABLE admin.users (
     permission VARCHAR(45)
 );
 
--- Tạo bảng admin.cookies
-CREATE TABLE admin.cookies (
-    cookie_id INT PRIMARY KEY,
-    cookie VARCHAR(1000),
-    status VARCHAR(45)
-);
-
 -- Tạo bảng user.comments
 CREATE TABLE user.comments (
     comment_id VARCHAR(100) PRIMARY KEY,

@@ -259,7 +259,7 @@
                 <td>${user.link_follow_limit}</td>
                 <td>${user.link_hide_limit}</td>
                 <td>${daysRemaining} ngày nữa</td>
-                <td><button class="delete-btn" onclick="deleteUser(${user.id})">Xóa</button></td>
+                <td><button class="delete-btn" onclick="deleteUser(${user.username})">Xóa</button></td>
             `;
             tbody.appendChild(row);
         });
@@ -312,11 +312,13 @@
         });
     }
 
-    async function deleteUser(userId) {
+    async function deleteUser(username) {
         if (confirm('Bạn có chắc chắn muốn xóa người dùng này?')) {
             try {
-                const response = await fetch(`/api/admin/delete-user/${userId}`, {
-                    method: 'DELETE'
+                const response = await fetch(`/api/admin/delete-user/`, {
+                    method: 'DELETE',
+                    body: JSON.stringify({username: username})
+
                 });
 
                 const result = await response.json();
@@ -332,7 +334,7 @@
             }
         }
     }
-    if (localStorage['admin'] != 'admin') {
+    if (localStorage['username'] != 'admin') {
         window.location.href = '/';
     }
 </script>

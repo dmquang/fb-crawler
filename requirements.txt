@@ -4,3 +4,4 @@ flask
 bs4
 xlsxwriter
 openpyxl
+pandas

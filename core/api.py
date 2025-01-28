@@ -39,15 +39,23 @@ class FacebookCrawler:
             self.lsd = None
             self.user_id = None
         else:
-            self.cookies = dict(item.split("=", 1) for item in cookie.replace(' ', '').split(";"))
+            self.cookies = {}
+            cks = cookie.replace(' ','').split(';')
+            for ck in cks:
+                try:
+                    key, value = ck.split('=')
+                    self.cookies[key] = value
+                except:
+                    break
+
             auth = FacebookAuthencation(cookie, proxy)
             self.user_id = auth.user_id
             self.fb_dtsg = auth.fb_dtsg
             self.jazoest = auth.jazoest
             self.lsd = auth.lsd
-            self.getCount()
-
+            
         self.id = self.getId()
+        self.getCount()
 
     def getComments(self) -> list:
         self.getCount()
@@ -133,8 +141,12 @@ class FacebookCrawler:
     def getId(self) -> str:
         # Lấy id của post
         post = self.session.get(self.url, cookies=self.cookies, proxies=self.proxies).text
-        id = post.split('"post_id":"')[1].split('"')[0]
-        return id
+        if 'reel' in self.url:
+            self.owner_id = post.split('"owner":{"__typename":"User","id":"')[1].split('"')[0]
+            self.id_reel = post.split(',"initial_node_id":')[1].split(',')[0]
+        self.id = post.split('"post_id":"')[1].split('"')[0]
+
+        return self.id
 
     def getCookies(self) -> dict:
         # Lấy cookies từ url
@@ -144,17 +156,63 @@ class FacebookCrawler:
             self.url = response.url
             response = requests.get(self.url, headers=self.headers, cookies=cookies, proxies=self.proxies)
             cookies = response.cookies.get_dict()
-
-        self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].split(',')[0].replace('}', ''))
-
-        self.comment_count = int(response.text.split('"comments":{"total_count":')[1].split('}')[0])
-
         return cookies
     
     def getCount(self) -> tuple:
-        response = requests.get(self.url, headers=self.headers, cookies=self.cookies, proxies=self.proxies)
-        self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].split(',')[0].replace('}', ''))
-        self.comment_count = int(response.text.split('"comments":{"total_count":')[1].split('}')[0])
+        if 'reel' in self.url:
+            b64_id = str_to_base64(f'S:_I{self.owner_id}:VK:{self.id_reel}')
+            headers = {
+                'accept': '*/*',
+                'accept-language': 'vi,en;q=0.9,vi-VN;q=0.8,fr-FR;q=0.7,fr;q=0.6,en-US;q=0.5',
+                'content-type': 'application/x-www-form-urlencoded',
+                'priority': 'u=1, i',
+                'sec-ch-prefers-color-scheme': 'dark',
+                'sec-ch-ua': '"Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
+                'sec-ch-ua-full-version-list': '"Not A(Brand";v="8.0.0.0", "Chromium";v="132.0.6834.111", "Google Chrome";v="132.0.6834.111"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-model': '""',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-ch-ua-platform-version': '"15.0.0"',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-origin',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+                'x-asbd-id': '129477',
+                'x-fb-friendly-name': 'FBReelsFeedbackLikeQuery',
+            }
+
+            data = {
+                'av': '0' if not self.user_id else self.user_id,
+                '__aaid': '0',
+                '__user': '0' if not self.user_id else self.user_id,
+                '__a': '1',
+                '__req': 'n',
+                '__hs': '20112.HYP:comet_loggedout_pkg.2.1.0.0.0',
+                'dpr': '1',
+                '__ccg': 'EXCELLENT',
+                'lsd': 'AVrsTDFZQco' if not self.lsd else self.lsd,
+                'fb_api_caller_class': 'RelayModern',
+                'fb_api_req_friendly_name': 'FBReelsFeedbackLikeQuery',
+                'variables': '{"id":"'+b64_id+'"}',
+                'server_timestamps': 'true',
+                'doc_id': '7356228301113273',
+            }
+
+            if self.fb_dtsg:
+                data['fb_dtsg'] = self.fb_dtsg
+                data['jazoest'] = self.jazoest
+
+            response = requests.post('https://www.facebook.com/api/graphql/', cookies=self.cookies, headers=headers, data=data, proxies=self.proxies).json()
+            self.reaction_count = response['data']['node']['feedback']['likers']['count']
+
+            response = requests.get(self.url, headers=self.headers, cookies=self.cookies, proxies=self.proxies)
+            self.comment_count = int(response.text.split('"comments":{"total_count":')[1].split('}')[0])
+
+        else:
+            response = requests.get(self.url, headers=self.headers, cookies=self.cookies, proxies=self.proxies)
+            self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].split(',')[0].replace('}', ''))
+            self.comment_count = int(response.text.split('"comments":{"total_count":')[1].split('}')[0])
+
         return (self.reaction_count, self.comment_count)
     
 
@@ -209,7 +267,7 @@ class CheckProxies:
         try:
             proxys = proxy.split(':')
             proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
-            response = requests.get('https://ipinfo.io/json', proxies=proxies).json()
+            response = requests.get('https://api64.ipify.org?format=json', proxies=proxies).json()
             return True
         except:
             return False
