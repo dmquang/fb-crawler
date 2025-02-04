@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FB Manager - Cookies</title>
+    <title>FB Manager - Tokens</title>
     <link rel="icon" href="{{ url_for('static', filename='facebook.png') }}" type="image/png">
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; }
@@ -31,9 +31,9 @@
             <div class="nav-links">
                 <a href="/posts" class="nav-link">Posts</a>
                 <a href="/posts-off" class="nav-link">Posts Off</a>
-                <a href="/cookies" class="nav-link active">Cookies</a>
+                <a href="/cookies" class="nav-link">Cookies</a>
                 <a href="/proxies" class="nav-link">Proxies</a>
-                <a href="/tokens" class="nav-link">Tokens</a>
+                <a href="/tokens" class="nav-link active">Tokens</a>
                 <a href="/comments" class="nav-link">Comments</a>
                 <a href="/admin" class="nav-link" id="admin-btn" style="background-color: #4CAF50;">Admin</a>
                 <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
@@ -42,21 +42,21 @@
     </nav>
 
     <div class="container">
-        <h2>Manage Cookies</h2>
+        <h2>Manage Tokens</h2>
         
-        <!-- Form thêm cookie mới -->
+        <!-- Form thêm token mới -->
         <div class="add-form">
-            <input type="text" class="form-input" id="newCookie" placeholder="Nhập cookie Facebook...">
-            <button class="action-btn resume-btn" onclick="addCookie()">Thêm Cookie</button>
+            <input type="text" class="form-input" id="newToken" placeholder="Nhập Token ...">
+            <button class="action-btn" onclick="addToken()">Thêm token</button>
         </div>
 
-        <!-- Bảng hiển thị cookies -->
-        <table id="cookiesTable">
+        <!-- Bảng hiển thị tokens -->
+        <table id="tokensTable">
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>Cookie ID</th>
-                    <th>Cookie</th>
+                    <th>Token ID</th>
+                    <th>Token</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -66,49 +66,49 @@
     </div>
 
     <script>
-        // Lấy username từ session (cần implement logic phù hợp)
-        const username = localStorage['username']; // Thay bằng giá trị thực tế
+        // Lấy username từ session
+        const username = localStorage['username']; 
 
         document.addEventListener("DOMContentLoaded", () => {
-            fetchCookies();
-            setInterval(fetchCookies, 20000); // Gọi fetchCookies() mỗi 20 giây
+            fetchProxies();
+            setInterval(fetchProxies, 90000); // Gọi fetchProxies() mỗi 90 giây
         });
 
-        async function fetchCookies() {
+        async function fetchProxies() {
             try {
-                const response = await fetch(`/api/user/cookies?user=${encodeURIComponent(username)}`, {
+                const response = await fetch(`/api/user/tokens?user=${encodeURIComponent(username)}`, {
                     method: 'GET',
                     headers: { 'Content-Type': 'application/json' }
                 });
                 const data = await response.json();
-                populateCookies(data.cookies);
+                populateProxies(data.tokens);
             } catch (error) {
                 console.error('Error:', error);
-                alert('Lỗi khi tải cookies!');
+                alert('Lỗi khi tải proxies!');
             }
         }
 
-        function populateCookies(cookies) {
-            const tbody = document.querySelector('#cookiesTable tbody');
+        function populateProxies(tokens) {
+            const tbody = document.querySelector('#tokensTable tbody');
             tbody.innerHTML = '';
 
-            if (!cookies || cookies.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5">Chưa có cookies nào</td></tr>';
+            if (!tokens || tokens.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4">Chưa có token nào</td></tr>';
                 return;
             }
 
-            cookies.forEach((cookie, index) => {
+            tokens.forEach((token, index) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${index + 1}</td>
-                    <td>${cookie.cookie_id}</td>
-                    <td class="copy-cookie" onclick="copyToClipboard('${cookie.cookie}')">
-                        ${maskCookie(cookie.cookie)}
+                    <td>${token.token_id}</td>
+                    <td class="copy-token" onclick="copyToClipboard('${token.token}')">
+                        ${maskToken(token.token)}
                     </td>
-                    <td>${cookie.status}</td>
+                    <td>${token.status}</td>
                     <td>
                         <button class="action-btn delete-btn" 
-                                onclick="deleteCookie('${cookie.cookie}')">
+                                onclick="deleteToken('${token.token_id}')">
                             Xóa
                         </button>
                     </td>
@@ -119,81 +119,85 @@
 
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {
-                alert('Đã sao chép cookie!');
+                alert('Đã sao chép token!');
             }).catch(err => {
                 console.error('Lỗi sao chép:', err);
             });
         }
 
-        function maskCookie(cookie) {
-            return cookie.substring(0, 15) + '...' + cookie.slice(-15);
+        function maskToken(token) {
+            return token.length > 30 
+                ? token.substring(0, 15) + '...' + token.slice(-15) 
+                : token;
         }
 
-        async function addCookie() {
-            const cookieInput = document.getElementById('newCookie');
-            const cookie = cookieInput.value.trim();
+        async function addToken() {
+            const tokenInput = document.getElementById('newToken');
+            const token = tokenInput.value;
 
-            if (!cookie) {
-                alert('Vui lòng nhập cookie!');
+            if (!token) {
+                alert('Vui lòng nhập token!');
                 return;
             }
 
             try {
-                const response = await fetch('/api/user/cookies', {
+                const response = await fetch('/api/user/tokens', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         username: username,
-                        cookie: cookie 
+                        token: token 
                     })
                 });
                 
                 const result = await response.json();
                 if (response.ok) {
-                    cookieInput.value = '';
-                    fetchCookies();
+                    tokenInput.value = '';
+                    fetchProxies();
                     alert(result.message);
                 } else {
                     alert(result.error);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Lỗi khi thêm cookie!');
+                alert('Lỗi khi thêm token!');
             }
         }
 
-        async function deleteCookie(cookie) {
-            if (!confirm('Bạn chắc chắn muốn xóa cookie này?')) return;
+        async function deleteToken(token_id) {
+            if (!confirm('Bạn chắc chắn muốn xóa token này?')) return;
 
             try {
-                const response = await fetch('/api/user/cookies', {
+                const response = await fetch('/api/user/tokens', {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         username: username,
-                        cookie: cookie 
+                        token_id: token_id 
                     })
                 });
 
                 const result = await response.json();
                 if (response.ok) {
-                    fetchCookies();
+                    fetchProxies();
                     alert(result.message);
                 } else {
                     alert(result.error);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Lỗi khi xóa cookie!');
+                alert('Lỗi khi xóa token!');
             }
         }
 
     </script>
-</body>
+
 <script>
     const isadmin = localStorage['username']
     if (isadmin != 'admin') {
         document.getElementById('admin-btn').style.display = 'none';
     }
 </script>
+
+</body>
 </html>

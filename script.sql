@@ -53,6 +53,8 @@ CREATE TABLE user.posts (
     username VARCHAR(45)
 );
 
+CREATE TABLE user.tokens (token_id varchar(150) PRIMARY KEY, token TEXT, status varchar(45), username VARCHAR(45));
+
 
 CREATE TABLE user.stopped_posts (
     post_id VARCHAR(100),

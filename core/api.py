@@ -1,9 +1,12 @@
 import requests, time, base64, threading, re
+import json
 from bs4 import BeautifulSoup
 from utils import *
 
 class FacebookCrawler:
     def __init__(self, url: str, cookie: str = None, proxy: str = None):
+        self.ok = True
+
         self.proxy = proxy
         if proxy:
             proxys = proxy.split(':')
@@ -53,9 +56,13 @@ class FacebookCrawler:
             self.fb_dtsg = auth.fb_dtsg
             self.jazoest = auth.jazoest
             self.lsd = auth.lsd
+            self.get_url()
             
         self.id = self.getId()
         self.getCount()
+
+    def get_url(self):
+        self.url = self.session.get(self.url, cookies=self.cookies, proxies=self.proxies).url
 
     def getComments(self) -> list:
         self.getCount()
@@ -105,8 +112,12 @@ class FacebookCrawler:
             data['fb_dtsg'] = self.fb_dtsg
             data['jazoest'] = self.jazoest
 
-        response = requests.post('https://www.facebook.com/api/graphql/', cookies=self.cookies, headers=headers, data=data, proxies=self.proxies).json()
-        edges = response['data']['node']['comment_rendering_instance_for_feed_location']['comments']['edges']
+        response = requests.post('https://www.facebook.com/api/graphql/', cookies=self.cookies, headers=headers, data=data, proxies=self.proxies).text
+        if '\n' in response:
+            response = response.split('\n')[0]
+        response_data = json.loads(response)
+        edges = response_data['data']['node']['comment_rendering_instance_for_feed_location']['comments']['edges']
+
 
         for node in edges:
             parent_uid = node['node']['legacy_token'].split('_')[1]
@@ -144,9 +155,11 @@ class FacebookCrawler:
         if 'reel' in self.url:
             self.owner_id = post.split('"owner":{"__typename":"User","id":"')[1].split('"')[0]
             self.id_reel = post.split(',"initial_node_id":')[1].split(',')[0]
-        self.id = post.split('"post_id":"')[1].split('"')[0]
-
-        return self.id
+        try:
+            id = post.split('"post_id":"')[1].split('"')[0]
+            return id
+        except:
+            self.ok = False
 
     def getCookies(self) -> dict:
         # Lấy cookies từ url
@@ -210,7 +223,7 @@ class FacebookCrawler:
 
         else:
             response = requests.get(self.url, headers=self.headers, cookies=self.cookies, proxies=self.proxies)
-            self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].split(',')[0].replace('}', ''))
+            self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].replace('}', '').split(',')[0])
             self.comment_count = int(response.text.split('"comments":{"total_count":')[1].split('}')[0])
 
         return (self.reaction_count, self.comment_count)
@@ -259,6 +272,7 @@ class FacebookAuthencation:
             self.lsd = response.split('"LSD",[],{"token":"')[1].split('"')[0]
             return user_id
         except:
+
             return 
 
 class CheckProxies:
@@ -271,3 +285,26 @@ class CheckProxies:
             return True
         except:
             return False
+
+class FacebookToken:
+    def __init__(self, token: str, proxy: str = None):
+        self.proxy = proxy
+        self.token = token
+        if proxy:
+            proxy_parts = proxy.split(":")
+            if len(proxy_parts) == 2:
+                self.proxies = {"http": f"http://{proxy}", "https": f"https://{proxy}"}
+            elif len(proxy_parts) == 4:
+                ip, port, user, password = proxy_parts
+                self.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"https://{user}:{password}@{ip}:{port}"}
+        else:
+            self.proxies = None
+
+    def me(self) -> str:
+        response = requests.get(f'https://graph.facebook.com/v11.0/me?access_token={self.token}', proxies=self.proxies).json()
+        return response['id'] if 'id' in response else 'Invalid Token'
+
+    def get_cookie(self) -> str:
+        sub=requests.post('https://graph.facebook.com/auth/create_session_for_app', data={"locale": "vi_VN","format": "json","new_app_id": "275254692598279","access_token": self.token,"generate_session_cookies":"1"}, proxies=self.proxies)
+        return sub.text
+    

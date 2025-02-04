@@ -1,11 +1,8 @@
-import os
-import sys
-import time
-import random
+import asyncio
 import logging
-import threading
-from datetime import datetime
+import random
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from utils import DatabaseManager
 from core.api import FacebookCrawler, FacebookAuthencation, CheckProxies
 from config import *
@@ -13,95 +10,95 @@ from config import *
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-
 class CronJob:
     def __init__(self):
         try:
             self.db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+            self.semaphore = asyncio.Semaphore(20)  # Giới hạn số lượng tác vụ đồng thời
+            self.thread_pool = ThreadPoolExecutor(max_workers=20)  # Tạo một ThreadPoolExecutor với 20 luồng
         except Exception as e:
             logging.error(f"Failed to initialize CronJob: {e}")
-            sys.exit(1)
+            raise
 
-    def main(self):
-        last_scan_off, last_check_cookie, last_check_proxy = 0, 0, 0
+    async def run(self):
         logging.info("Cron job started.")
-
         while True:
             try:
-                current_time = time.time()
-
-                # Scan active posts
-                self.scan_comments()
-
-                # Scan stopped posts every 20 minutes
-                if current_time - last_scan_off >= 1200:
-                    self.scan_comments_off()
-                    last_scan_off = current_time
-
-                # Check cookies every 1 hour
-                if current_time - last_check_cookie >= 3600:
-                    self.check_cookies()
-                    last_check_cookie = current_time
-
-                # Check proxies every 10 minutes
-                if current_time - last_check_proxy >= 600:
+                tasks = [
+                    self.scan_comments(),
+                    self.check_cookies(),
                     self.check_proxies()
-                    last_check_proxy = current_time
-
-                time.sleep(SCAN_DELAY * 0.001)
-
+                ]
+                await asyncio.gather(*tasks)
+                await asyncio.sleep(SCAN_DELAY * 0.001)
             except Exception as e:
-                logging.critical(f"Fatal error in main function: {e}. Restarting...")
-                time.sleep(5)
+                logging.critical(f"Fatal error in main loop: {e}. Restarting...")
+                await asyncio.sleep(5)
 
-    def scan_comments(self):
-        self._scan_posts("posts", self._scanComments)
+    async def scan_comments(self):
+        await self._scan_posts("posts", self._scanComments)
 
-    def scan_comments_off(self):
-        self._scan_posts("stopped_posts", self._scanCommentsOff)
-
-    def _scan_posts(self, table, scan_function):
+    async def _scan_posts(self, table, scan_function):
         try:
             posts = self.db.fetch_data(table)
-            logging.info(f"Fetched {len(posts)} posts from {table}.")
-            
-            with ThreadPoolExecutor(max_workers=10) as executor:
-                for post in posts:
-                    try:
-                        username = post[9] if table == "posts" else None
-                        proxy = self._get_proxy(username)
-                        executor.submit(scan_function, post[1], proxy)
-                    except Exception as e:
-                        logging.error(f"Error scheduling scan for post {post[1]}: {e}")
+            if not posts:
+                logging.info(f"No posts found in {table}.")
+                return
 
+            logging.info(f"Fetched {len(posts)} posts from {table}.")
+            tasks = [
+                self._run_with_semaphore(scan_function, post[1], self._get_proxy(post[9] if table == "posts" else None))
+                for post in posts
+            ]
+            await asyncio.gather(*tasks)
         except Exception as e:
             logging.error(f"An error occurred in _scan_posts ({table}): {e}")
 
-    def check_cookies(self):
-        self._check_items("cookies", self._checkCookie)
+    async def _run_with_semaphore(self, func, *args, **kwargs):
+        async with self.semaphore:
+            await func(*args, **kwargs)
 
-    def check_proxies(self):
-        self._check_items("proxies", self._checkProxy)
+    async def check_cookies(self):
+        await self._check_items("cookies", self._checkCookie)
 
-    def _check_items(self, table, check_function):
+    async def check_proxies(self):
+        await self._check_items("proxies", self._checkProxy)
+
+    async def _check_items(self, table, check_function):
         try:
-            items = self.db.fetch_data(table, condition="status = 'live'")
+            condition = "status = 'Active'" if table == "proxies" else "status = 'live'"
+            items = self.db.fetch_data(table, condition=condition)
+
+            if not items:
+                logging.info(f"No {table} to check.")
+                return
+
             logging.info(f"Checking {len(items)} {table}.")
-
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                for item in items:
-                    executor.submit(check_function, item[1])
-
+            tasks = [self._run_with_semaphore(check_function, item[1]) for item in items]
+            await asyncio.gather(*tasks)
         except Exception as e:
             logging.error(f"An error occurred in _check_items ({table}): {e}")
 
-    def _scanComments(self, post_name, proxy=None):
-        self._process_post(post_name, proxy, update_table="stopped_posts")
+    async def _scanComments(self, post_name, proxy=None):
+        # Chạy _process_post trong một luồng riêng
+        await asyncio.get_event_loop().run_in_executor(
+            self.thread_pool,  # Sử dụng ThreadPoolExecutor
+            self._run_process_post,  # Gọi hàm wrapper
+            post_name, proxy, "posts"
+        )
 
-    def _scanCommentsOff(self, post_name, proxy=None):
-        self._process_post(post_name, proxy, update_table="posts", delay=1200)
+    def _run_process_post(self, post_name, proxy, update_table):
+        # Tạo một event loop mới trong luồng riêng
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._process_post(post_name, proxy, update_table))
+        except Exception as e:
+            logging.error(f"Error in _run_process_post: {e}")
+        finally:
+            loop.close()
 
-    def _process_post(self, post_name, proxy, update_table, delay=0):
+    async def _process_post(self, post_name, proxy, update_table, delay=0):
         try:
             logging.info(f"Scanning comments for post: {post_name}")
             data = self.db.fetch_data('posts', condition=f"post_name = '{post_name}'")
@@ -115,76 +112,64 @@ class CronJob:
                 crawler = FacebookCrawler(url=post_url, proxy=proxy)
                 reaction_count, comment_count, comments = crawler.reaction_count, crawler.comment_count, crawler.getComments()
             except Exception as e:
-                logging.warning(f"Proxy failed for {post_name}, trying admin cookie. Error: {e}")
-                comments = self._fetch_with_admin_cookie(post_url, proxy)
+                cookies = self.db.fetch_data('cookies', condition="username = 'admin' AND status = 'live'")
+                cookie = random.choice(cookies)[1]
+                crawler = FacebookCrawler(url=post_url, cookie=cookie, proxy=proxy)
+                reaction_count, comment_count, comments = crawler.getComments()
                 if comments is None:
                     return
 
             last_comment = comments[0]['created_time'] if comments else None
             self.db.bulk_update(update_table, [{'post_name': post_name, 'reaction_count': reaction_count, 'comment_count': comment_count, 'last_comment': last_comment}], 'post_name')
 
-            for comment in comments:
-                self._insert_comment(comment, post_name, username)
+            tasks = [self._insert_comment(comment, post_name, username) for comment in comments]
+            await asyncio.gather(*tasks)
 
             logging.info(f"Finished scanning comments for post: {post_name}")
-            if delay:
-                time.sleep(delay)
-
         except Exception as e:
             logging.error(f"An error occurred while scanning comments for post {post_name}: {e}")
 
-    def _fetch_with_admin_cookie(self, post_url, proxy):
+    async def _insert_comment(self, comment, post_name, username):
         try:
-            admin_cookies = self.db.fetch_data('cookies', condition="username = 'admin' AND status = 'live'")
-            if not admin_cookies:
-                logging.warning("No valid admin cookies found. Skipping post.")
-                return None
-
-            cookie = random.choice(admin_cookies)[1]
-            crawler = FacebookCrawler(post_url, cookie, proxy)
-            return crawler.getComments()
-        except Exception as e:
-            logging.error(f"Failed to fetch data with admin cookie. Skipping post. Error: {e}")
-            return None
-
-    def _insert_comment(self, comment, post_name, username):
-        try:
-            comment_id, post_id = comment['comment_id'], comment['post_id']
-            author_id, author_name, author_avatar = comment['author_id'], comment['author_name'], comment['author_avatar']
-            content, created_time = comment['content'], comment['created_time']
-
+            comment_id = comment['comment_id']
             if self.db.fetch_data('comments', condition=f"comment_id = '{comment_id}'"):
                 logging.info(f"Comment {comment_id} already exists, skipping.")
                 return
 
-            logging.info(f"Inserting new comment {comment_id} for post {post_id}")
-            self.db.add_data('comments',
-                             ['comment_id', 'post_id', 'post_name', 'author_id', 'author_name', 'author_avatar', 'content', 'created_time', 'username'],
-                             [(comment_id, post_id, post_name, author_id, author_name, author_avatar, content, created_time, username)])
+            self.db.add_data(
+                'comments',
+                ['comment_id', 'post_id', 'post_name', 'author_id', 'author_name', 'author_avatar', 'content', 'created_time', 'username'],
+                [(comment['comment_id'], comment['post_id'], post_name, comment['author_id'], comment['author_name'], comment['author_avatar'], comment['content'], comment['created_time'], username)]
+            )
         except Exception as e:
-            logging.error(f"Error inserting comment {comment_id}: {e}")
+            logging.error(f"Error inserting comment {comment['comment_id']}: {e}")
 
-    def _get_proxy(self, username):
-        proxies = self.db.fetch_data('proxies', condition=f"username = '{username}' AND status = 'Active'") if username else []
-        if not proxies:
-            proxies = self.db.fetch_data('proxies', condition="username = 'admin' AND status = 'Active'")
-        return random.choice(proxies)[0] if proxies else None
+    async def _checkCookie(self, cookie):
+        try:
+            fb = FacebookAuthencation(cookie)
+            if not fb.user_id:
+                self.db.bulk_update('cookies', [{'cookie': cookie, 'status': 'die'}], 'cookie')
+        except Exception as e:
+            logging.error(f"Error checking cookie {cookie}: {e}")
 
-    def _checkCookie(self, cookie):
-        fb = FacebookAuthencation(cookie)
-        if not fb.user_id:
-            self.db.bulk_update('cookies', [{'cookie': cookie, 'status': 'die'}], 'cookie')
+    async def _checkProxy(self, proxy):
+        try:
+            if not CheckProxies.check(proxy):
+                self.db.bulk_update('proxies', [{'proxy': proxy, 'status': 'unactive'}], 'proxy')
+        except Exception as e:
+            logging.error(f"Error checking proxy {proxy}: {e}")
 
-    def _checkProxy(self, proxy):
-        if not CheckProxies.check(proxy):
-            self.db.bulk_update('proxies', [{'proxy': proxy, 'status': 'unactive'}], 'proxy')
+    def _get_proxy(self, username=None):
+        try:
+            proxies = self.db.fetch_data('proxies', condition=f"username = '{username}' AND status = 'Active'") if username else []
+            if not proxies:
+                proxies = self.db.fetch_data('proxies', condition="username = 'admin' AND status = 'Active'")
+            return random.choice(proxies)[0] if proxies else None
+        except Exception as e:
+            logging.error(f"Error fetching proxy for username {username}: {e}")
+            return None
 
 
 if __name__ == "__main__":
-    while True:
-        try:
-            cron = CronJob()
-            cron.main()
-        except Exception as e:
-            logging.critical(f"Fatal error in script: {e}. Restarting...")
-            time.sleep(5)
+    cron = CronJob()
+    asyncio.run(cron.run())

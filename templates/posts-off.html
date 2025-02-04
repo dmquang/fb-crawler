@@ -96,6 +96,7 @@
                 <a href="/posts-off" class="nav-link active">Posts Off</a>
                 <a href="/cookies" class="nav-link">Cookies</a>
                 <a href="/proxies" class="nav-link">Proxies</a>
+                <a href="/tokens" class="nav-link">Tokens</a>
                 <a href="/comments" class="nav-link">Comments</a>
                 <a href="/admin" class="nav-link" id="admin-btn" style="background-color: #4CAF50;">Admin</a>
                 <a href="/logout" class="nav-link" style="background-color: #ff2020;">Logout</a>
@@ -125,32 +126,49 @@
     </div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const requestData = {
-                username: localStorage['username'],  // Ví dụ về dữ liệu gửi đi
-            };
-
-            fetch('/api/stopped-posts', {
-                method: 'POST',  // Đổi phương thức thành POST
-                headers: {
-                    'Content-Type': 'application/json'  // Chỉ định rằng dữ liệu gửi lên là JSON
-                },
-                body: JSON.stringify(requestData)  // Chuyển đổi đối tượng JavaScript thành chuỗi JSON
-            })
-            .then(response => response.json())
-            .then(data => populateTable(data.stopped_posts))
-            .catch(error => console.error('Error:', error));
+        document.addEventListener("DOMContentLoaded", async () => {
+            try {
+                const username = localStorage.getItem('username');
+                if (!username) {
+                    console.error('Username is not set in localStorage.');
+                    return;
+                }
+    
+                const data = await fetchStoppedPosts(username);
+                populateTable(data.stopped_posts);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to fetch posts. Please try again later.');
+            }
         });
-
+    
+        // Fetch data from the API
+        async function fetchStoppedPosts(username) {
+            const response = await fetch('/api/stopped-posts', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username }),
+            });
+    
+            if (!response.ok) {
+                throw new Error(`Failed to fetch posts: ${response.statusText}`);
+            }
+    
+            return response.json();
+        }
+    
+        // Populate the table with the fetched posts
         function populateTable(posts) {
             const tableBody = document.querySelector('#postsTable tbody');
             tableBody.innerHTML = '';
-
+    
             if (!posts || posts.length === 0) {
                 tableBody.innerHTML = '<tr><td colspan="10">No posts available</td></tr>';
                 return;
             }
-
+    
             posts.forEach((post, index) => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
@@ -171,36 +189,59 @@
                 tableBody.appendChild(row);
             });
         }
-
+    
+        // Format timestamp into human-readable format
         function formatDateTime(timestamp) {
             if (!timestamp) return 'N/A';
-            return new Date(timestamp * 1000).toLocaleString();
+            const date = new Date(timestamp * 1000); // Convert Unix timestamp to milliseconds
+            return date.toLocaleString('en-US', { hour12: false }); // Adjust locale and options as needed
         }
-
-        function resumePost(postName) {
-            fetch('/api/posts/resume', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ post_name: postName })
-            })
-            .then(response => response.json())
-            .then(() => location.reload())
-            .catch(error => console.error('Error:', error));
+    
+        // Resume a post
+        async function resumePost(postName) {
+            try {
+                const response = await fetch('/api/posts/resume', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ post_name: postName }),
+                });
+    
+                if (!response.ok) {
+                    throw new Error('Failed to resume post');
+                }
+    
+                alert('Post resumed successfully.');
+                location.reload();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to resume the post. Please try again.');
+            }
         }
-
-        function deletePost(postName) {
+    
+        // Delete a post
+        async function deletePost(postName) {
             if (confirm('Are you sure you want to delete this post?')) {
-                fetch(`/api/posts/delete`, {
-                    method: 'DELETE',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ post_name: postName })
-                })
-                .then(response => response.json())
-                .then(() => location.reload())
-                .catch(error => console.error('Error:', error));
+                try {
+                    const response = await fetch('/api/posts/delete', {
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ post_name: postName }),
+                    });
+    
+                    if (!response.ok) {
+                        throw new Error('Failed to delete post');
+                    }
+    
+                    alert('Post deleted successfully.');
+                    location.reload();
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Failed to delete the post. Please try again.');
+                }
             }
         }
     </script>
+    
 </body>
 <script>
     const isadmin = localStorage['username']

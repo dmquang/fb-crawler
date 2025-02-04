@@ -1,5 +1,5 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for
-from core.api import FacebookCrawler, FacebookAuthencation, CheckProxies
+from core.api import FacebookCrawler, FacebookAuthencation, CheckProxies, FacebookToken
 from utils import DatabaseManager
 from config import *
 import time
@@ -350,7 +350,7 @@ def toggle_post():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/posts/delete', methods=['POST'])
+@app.route('/api/posts/delete', methods=['DELETE', 'POST'])
 def delete_post():
     try:
         data = request.get_json()
@@ -513,8 +513,17 @@ def add_post():
         proxy = random.choice(proxies)[0]
 
         # Tạo đối tượng FacebookCrawler để lấy thông tin bài viết
-        fb = FacebookCrawler(url=post_url, proxy=proxy)
-        
+        try:
+            fb = FacebookCrawler(url=post_url, proxy=proxy)
+        except:
+            cookies = db.fetch_data('cookies', condition=f"username = 'admin' AND status = 'live'")
+            if cookies == []:
+                cookies = db.fetch_data('cookies', condition=f"username = '{username}' AND status = 'live'")
+            cookie = random.choice(cookies)[1]
+            fb = FacebookCrawler(url=post_url, cookie=cookie, proxy=proxy)
+            
+
+
         # Lấy thông tin từ FacebookCrawler
         post_id = fb.id  # Lấy post_id từ đối tượng FacebookCrawler
         reaction_count = int(fb.reaction_count)  # Số lượng reaction
@@ -527,16 +536,12 @@ def add_post():
         
         
         # Thêm bài viết vào cơ sở dữ liệu
-        insert_sql = f"""
-            INSERT INTO posts (post_id, post_name, post_url, username, reaction_count, comment_count, time_created, status, delay)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, {SCAN_DELAY})
-        """
-        db.execute_query(insert_sql, (post_id, post_name, post_url, username, reaction_count, comment_count, time_created, status))
+        columns = ['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'status', 'delay']
+        db.add_data('posts', columns=columns, values_list=[(post_id, post_name, post_url, username, reaction_count, comment_count, time_created, status, SCAN_DELAY)])
         db.close()
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 
 @app.route('/api/admin/login', methods=['POST'])
@@ -1440,7 +1445,12 @@ def user_cookies():
                 
             cookie = data['cookie']
             username = data['username']
-            fb = FacebookAuthencation(cookie)
+            proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
+            if proxies != []:
+                proxy = random.choice(proxies)[0]
+                fb = FacebookAuthencation(cookie, proxy=proxy)
+            else:
+                fb = FacebookAuthencation(cookie)
             
             if not fb.user_id:
                 return jsonify({'error': 'Invalid cookie or cookie is expired!'}), 400
@@ -1513,8 +1523,65 @@ def user_proxies():
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         return jsonify({'error': 'Internal server error'}), 500
-    
 
+
+@app.route('/api/user/tokens', methods=['GET', 'POST', 'DELETE'])
+def user_tokens():
+    try:
+        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+
+        if request.method == 'GET':
+            username = request.args.get('user')
+            data = db.fetch_data('tokens', condition=f"WHERE username = '{username}'" if username != 'admin' else '')
+            db.close()
+
+            return jsonify({'tokens': [{
+                'token_id': t[0],
+                'token': t[1],
+                'status': t[2],
+                'username': t[3]
+            }] for t in data })
+        
+        elif request.method == 'POST':
+            username = request.get_json()['username']
+            token = request.get_json()['token']
+
+            proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
+            if proxies != []:
+                proxy = random.choice(proxies)[0]
+                fb_token = FacebookToken(token=token, proxy=proxy)
+            else:
+                fb_token = FacebookToken(token=token)
+            
+            token_id = fb_token.me()
+            if token_id == 'Invalid Token':
+                return jsonify({'error': 'Invalid token'}), 400
+
+            db.add_data(
+                'tokens',
+                columns=['token_id', 'token', 'status', 'username'],
+                values_list=[(token_id, token, 'live', username)]
+            )
+            db.close()
+
+            return jsonify({'message': 'Token added successfully!'}), 200
+        
+        elif request.method == 'DELETE':
+            username = request.get_json()['username']
+            token_id = request.get_json()['token_id']
+
+            db.delete_data('tokens', condition=f"token_id = '{token_id}'")
+            db.close()
+
+            return jsonify({'message': 'Token deleted successfully!'}), 200
+        
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/tokens')
+def tokens():
+    return render_template('tokens.html')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=7220)
