@@ -1,5 +1,5 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for
-from core.api import FacebookCrawler, FacebookAuthencation, CheckProxies, FacebookToken
+from core.api import FacebookCrawler, FacebookAuthencation, CheckProxies, FacebookToken, FacebookTokenExtractor
 from utils import DatabaseManager
 from config import *
 import time
@@ -277,40 +277,11 @@ def export_comments():
 
 @app.route('/api/comments/hide', methods=['POST'])
 def hide_comment():
-    try:
-        data = request.get_json()
-        comment_id = data.get('comment_id')
-        
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-        # Lấy thông tin comment trước khi xóa
-        comment_sql = "SELECT * FROM comments WHERE comment_id = %s"
-        comment = db.execute_query(comment_sql, (comment_id,))[0]
-        
-        # Thêm vào bảng deleted_comments
-        insert_sql = """
-            INSERT INTO deleted_comments 
-            (comment_id, post_id, author_id, author_name, author_avatar, 
-             content, info, phone_number, created_time, username, deleted_time)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, UNIX_TIMESTAMP())
-        """
-        
-        values = (
-            comment[0], comment[1], comment[2], comment[3], comment[4],
-            comment[5], comment[6], comment[7], comment[8], comment[9]
-        )
-        
-        db.execute_query(insert_sql, values)
-        
-        # Xóa từ bảng comments
-        delete_sql = "DELETE FROM comments WHERE comment_id = %s"
-        db.execute_query(delete_sql, (comment_id,))
-        
-        db.close()
-        return jsonify({'success': True, 'message': 'Comment deleted successfully'}), 200
-        
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+    db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+    comment_id = request.get_json()['comment_id']
+
+
+    
 
 @app.route('/api/posts/toggle', methods=['POST'])
 def toggle_post():
@@ -430,53 +401,53 @@ def get_stopped_posts_v2():  # Renamed function to avoid conflict
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/posts')
-def get_posts():
-    try:
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+# @app.route('/api/posts')
+# def get_posts():
+#     try:
+#         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
         
-        auth_header = request.headers.get('Authorization')
-        token = auth_header.split(" ")[1]
-        data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        current_user = data['username']
-        is_admin = data.get('is_admin', False)
+#         auth_header = request.headers.get('Authorization')
+#         token = auth_header.split(" ")[1]
+#         data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+#         current_user = data['username']
+#         is_admin = data.get('is_admin', False)
         
-        if is_admin:
-            sql = """
-                SELECT p.*, u.username 
-                FROM posts p
-                LEFT JOIN admin.users u ON p.username = u.username
-                WHERE p.status != 'stopped'
-                ORDER BY p.time_created DESC
-            """
-            posts = db.execute_query(sql)
-        else:
-            sql = """
-                SELECT * FROM posts 
-                WHERE username = %s AND status != 'stopped'
-                ORDER BY time_created DESC
-            """
-            posts = db.execute_query(sql, (current_user,))
+#         if is_admin:
+#             sql = """
+#                 SELECT p.*, u.username 
+#                 FROM posts p
+#                 LEFT JOIN admin.users u ON p.username = u.username
+#                 WHERE p.status != 'stopped'
+#                 ORDER BY p.time_created DESC
+#             """
+#             posts = db.execute_query(sql)
+#         else:
+#             sql = """
+#                 SELECT * FROM posts 
+#                 WHERE username = %s AND status != 'stopped'
+#                 ORDER BY time_created DESC
+#             """
+#             posts = db.execute_query(sql, (current_user,))
         
-        posts_data = []
-        for post in posts:
-            posts_data.append({
-                'post_id': post[0],
-                'post_name': post[1],
-                'post_url': post[2],
-                'reaction_count': post[3],
-                'comment_count': post[4],
-                'time_created': post[5],
-                'last_comment': post[6],
-                'delay': post[7],
-                'status': post[8],
-                'username': post[9]
-            })
-        db.close()
-        return jsonify(posts_data), 200
+#         posts_data = []
+#         for post in posts:
+#             posts_data.append({
+#                 'post_id': post[0],
+#                 'post_name': post[1],
+#                 'post_url': post[2],
+#                 'reaction_count': post[3],
+#                 'comment_count': post[4],
+#                 'time_created': post[5],
+#                 'last_comment': post[6],
+#                 'delay': post[7],
+#                 'status': post[8],
+#                 'username': post[9]
+#             })
+#         db.close()
+#         return jsonify(posts_data), 200
         
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/posts/edit', methods=['POST'])
 def edit_post():
@@ -509,71 +480,87 @@ def add_post():
         username = data['username']  # Lấy username từ dữ liệu gửi lên
         # Kết nối với cơ sở dữ liệu
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
-        proxy = random.choice(proxies)[0]
+        proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND username = '{username}' AND status = 'Active'")
+        proxy = random.choice(proxies)[0] if proxies != [] else None
 
-        # Tạo đối tượng FacebookCrawler để lấy thông tin bài viết
-        try:
-            fb = FacebookCrawler(url=post_url, proxy=proxy)
-        except:
-            cookies = db.fetch_data('cookies', condition=f"username = 'admin' AND status = 'live'")
-            if cookies == []:
-                cookies = db.fetch_data('cookies', condition=f"username = '{username}' AND status = 'live'")
-            cookie = random.choice(cookies)[1]
-            fb = FacebookCrawler(url=post_url, cookie=cookie, proxy=proxy)
+        # Random chọn token hoặc cookie
+        tokens = db.fetch_data('tokens') or []
+        cookies = db.fetch_data('cookies') or []
+        auth = None
+        if tokens or cookies:
+            if tokens and cookies:
+                auth = random.choice(["token", "cookie"])
+            else:
+                auth = "token" if tokens else "cookie"
             
+            if auth == "token":
+                token = random.choice(tokens)[1]
+                cookie = None
+            else:
+                cookie = random.choice(cookies)[1]
+                token = None
+        
+        # Xử lý token và cookie
+        if token:
+            print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+            fbtk = FacebookToken(token=token, proxy=proxy)
+            cookie = fbtk.get_cookie()
+            print(f"[{datetime.now()}] 🍪 Đã lấy cookie từ token cho {post_name}")
+        
+        try:
+            crawler = FacebookCrawler(post_url, cookie, proxy)
+            crawler.getCount()
+            comment_count = crawler.comment_count
+            reaction_count = crawler.reaction_count
+            # Thêm comment vào database
+            comments = crawler.getComments()
+        except:
+            if not token:
+                gettoken = FacebookTokenExtractor('EAAAAAY', proxy)
+                token = gettoken.get_login(cookie)['access_token']
+            
+            fbtk = FacebookToken(token=token, proxy=proxy)
+            cookie = fbtk.get_cookie()
+            crawler = FacebookCrawler(post_url, cookie, proxy)
+            comment_count, reaction_count = fbtk.getCount(crawler.owner_id + '_' + crawler.id)
+            comments = fbtk.getComments(crawler.owner_id + '_' + crawler.id)
 
+        if comments:
+            comment_data = db.fetch_data('comments')
+            existing_comment_ids = {c[0] for c in comment_data}  # Giả sử comment_id nằm ở vị trí đầu tiên trong tuple
+
+            # Lọc ra các comment chưa có trong database
+            new_comments = [
+                (c['comment_id'], crawler.id, post_name, c['author_id'], c['author_name'], 
+                c['author_avatar'], c['content'], '', '', c['created_time'], username)
+                for c in comments if c['comment_id'] not in existing_comment_ids
+            ]
+            db.add_data(
+                'comments',
+                ['comment_id', 'post_id', 'post_name', 'author_id', 'author_name', 
+                 'author_avatar', 'content', 'info', 'phone_number', 'created_time', 'username'],
+                new_comments
+            )
+            print(f"[{datetime.now()}] 💾 Đã lưu {len(new_comments)} comment mới cho {post_name}")
 
         # Lấy thông tin từ FacebookCrawler
-        post_id = fb.id  # Lấy post_id từ đối tượng FacebookCrawler
-        reaction_count = int(fb.reaction_count)  # Số lượng reaction
-        comment_count = int(fb.comment_count)    # Số lượng comment
+        post_id = crawler.id  # Lấy post_id từ đối tượng FacebookCrawler
+        reaction_count = int(reaction_count)  # Số lượng reaction
+        comment_count = int(comment_count)    # Số lượng comment
         
         # Cập nhật thời gian và trạng thái mặc định là 'active'
         status = 'active'
         time_created = int(time.time())  # Thời gian hiện tại
         
-        
-        
         # Thêm bài viết vào cơ sở dữ liệu
-        columns = ['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'status', 'delay']
-        db.add_data('posts', columns=columns, values_list=[(post_id, post_name, post_url, username, reaction_count, comment_count, time_created, status, SCAN_DELAY)])
+        columns = ['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'status', 'delay']
+        db.add_data('posts', columns=columns, values_list=[(post_id, post_name, post_url, username, reaction_count, comment_count, time_created, comments[0]['created_time'], status, SCAN_DELAY)])
         db.close()
         return jsonify({'success': True}), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/admin/login', methods=['POST'])
-def admin_login():
-    try:
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
-        
-        # Check admin credentials
-        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-            token = jwt.encode({
-                'username': username,
-                'is_admin': True,
-                'exp': datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
-            }, JWT_SECRET_KEY)
-            
-            return jsonify({
-                'success': True,
-                'token': token
-            }), 200
-        
-        return jsonify({
-            'success': False,
-            'error': 'Invalid admin credentials'
-        }), 401
-            
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
 
 @app.route('/login')
 def login_page():
@@ -1544,15 +1531,22 @@ def user_tokens():
         
         elif request.method == 'POST':
             username = request.get_json()['username']
-            token = request.get_json()['token']
-
+            dataInput = request.get_json()['data']
+            type = request.get_json()['type']
+            
+            proxy = None
             proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
             if proxies != []:
                 proxy = random.choice(proxies)[0]
-                fb_token = FacebookToken(token=token, proxy=proxy)
+
+            if type == 'token':
+                token = dataInput
             else:
-                fb_token = FacebookToken(token=token)
-            
+                gettoken = FacebookTokenExtractor('EAAAAAY', proxy)
+                token = gettoken.get_login(dataInput)['access_token']
+                
+            fb_token = FacebookToken(token=token, proxy=proxy)
+
             token_id = fb_token.me()
             if token_id == 'Invalid Token':
                 return jsonify({'error': 'Invalid token'}), 400

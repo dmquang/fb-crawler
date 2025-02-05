@@ -46,7 +46,12 @@
         
         <!-- Form thêm token mới -->
         <div class="add-form">
-            <input type="text" class="form-input" id="newToken" placeholder="Nhập Token ...">
+            <input type="text" class="form-input" id="newToken" placeholder="Nhập Token hoặc Cookie ...">
+            <label for="options">Nhập Cookie hay Token:</label>
+            <select id="options" name="options">
+                <option value="token">Token</option>
+                <option value="2">Cookie</option>
+            </select>
             <button class="action-btn" onclick="addToken()">Thêm token</button>
         </div>
 
@@ -133,10 +138,11 @@
 
         async function addToken() {
             const tokenInput = document.getElementById('newToken');
-            const token = tokenInput.value;
+            const dataInput = tokenInput.value;
+            const type = document.getElementById('options').value;
 
-            if (!token) {
-                alert('Vui lòng nhập token!');
+            if (!dataInput) {
+                alert('Vui lòng nhập!');
                 return;
             }
 
@@ -146,7 +152,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         username: username,
-                        token: token 
+                        data: dataInput,
+                        type: type
                     })
                 });
                 

@@ -38,12 +38,16 @@ class DatabaseManager:
         conn, cursor = self._connect()
         columns_str = ', '.join(columns)
         placeholders = ', '.join(['%s'] * len(columns))
-        sql = f"INSERT INTO {table} ({columns_str}) VALUES ({placeholders})"
+        
+        # Sử dụng INSERT IGNORE để bỏ qua các bản ghi trùng lặp
+        sql = f"INSERT IGNORE INTO {table} ({columns_str}) VALUES ({placeholders})"
+        
         try:
             cursor.executemany(sql, values_list)
             conn.commit()
+            print(f"[{datetime.now()}] 💾 Đã chèn {cursor.rowcount} bản ghi vào {table}")
         except mysql.connector.Error as err:
-            print(f"Error while adding data: {err}")
+            print(f"[{datetime.now()}] ❌ Lỗi khi thêm dữ liệu vào {table}: {err}")
             conn.rollback()
         finally:
             cursor.close()

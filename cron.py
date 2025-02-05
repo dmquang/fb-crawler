@@ -1,175 +1,197 @@
-import asyncio
-import logging
-import random
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from core.api import *
+import threading
+from time import sleep
 from utils import DatabaseManager
-from core.api import FacebookCrawler, FacebookAuthencation, CheckProxies
 from config import *
+import random
+import traceback
+from datetime import datetime
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-class CronJob:
-    def __init__(self):
+def comment_progress(url, post_name, username, delay, token=None, cookie=None, proxy=None):
+    try:
+        print(f"\n[{datetime.now()}] 🔄 Bắt đầu xử lý post: {post_name}")
+        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+        
+        # Xử lý token và cookie
+        if token:
+            print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+            fbtk = FacebookToken(token=token, proxy=proxy)
+            cookie = fbtk.get_cookie()
+            print(f"[{datetime.now()}] 🍪 Đã lấy cookie từ token cho {post_name}")
+        
         try:
-            self.db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-            self.semaphore = asyncio.Semaphore(20)  # Giới hạn số lượng tác vụ đồng thời
-            self.thread_pool = ThreadPoolExecutor(max_workers=20)  # Tạo một ThreadPoolExecutor với 20 luồng
-        except Exception as e:
-            logging.error(f"Failed to initialize CronJob: {e}")
-            raise
+            crawler = FacebookCrawler(url, cookie, proxy)
+            crawler.getCount()
+            comment_count = crawler.comment_count
+            reaction_count = crawler.reaction_count
+            # Thêm comment vào database
+            comments = crawler.getComments()
+        except:
+            if not token:
+                gettoken = FacebookTokenExtractor('EAAAAAY', proxy)
+                token = gettoken.get_login(cookie)['access_token']
+            
+            fbtk = FacebookToken(token=token, proxy=proxy)
+            cookie = fbtk.get_cookie()
+            print(cookie)
+            crawler = FacebookCrawler(url, cookie, proxy)
+            comment_count, reaction_count = fbtk.getCount(crawler.owner_id + '_' + crawler.id)
+            comments = fbtk.getComments(crawler.owner_id + '_' + crawler.id)
 
-    async def run(self):
-        logging.info("Cron job started.")
-        while True:
-            try:
-                tasks = [
-                    self.scan_comments(),
-                    self.check_cookies(),
-                    self.check_proxies()
-                ]
-                await asyncio.gather(*tasks)
-                await asyncio.sleep(SCAN_DELAY * 0.001)
-            except Exception as e:
-                logging.critical(f"Fatal error in main loop: {e}. Restarting...")
-                await asyncio.sleep(5)
 
-    async def scan_comments(self):
-        await self._scan_posts("posts", self._scanComments)
+        print(f"[{datetime.now()}] 📊 Post {post_name} có {comment_count} comment và {reaction_count} reaction")
 
-    async def _scan_posts(self, table, scan_function):
-        try:
-            posts = self.db.fetch_data(table)
-            if not posts:
-                logging.info(f"No posts found in {table}.")
-                return
-
-            logging.info(f"Fetched {len(posts)} posts from {table}.")
-            tasks = [
-                self._run_with_semaphore(scan_function, post[1], self._get_proxy(post[9] if table == "posts" else None))
-                for post in posts
-            ]
-            await asyncio.gather(*tasks)
-        except Exception as e:
-            logging.error(f"An error occurred in _scan_posts ({table}): {e}")
-
-    async def _run_with_semaphore(self, func, *args, **kwargs):
-        async with self.semaphore:
-            await func(*args, **kwargs)
-
-    async def check_cookies(self):
-        await self._check_items("cookies", self._checkCookie)
-
-    async def check_proxies(self):
-        await self._check_items("proxies", self._checkProxy)
-
-    async def _check_items(self, table, check_function):
-        try:
-            condition = "status = 'Active'" if table == "proxies" else "status = 'live'"
-            items = self.db.fetch_data(table, condition=condition)
-
-            if not items:
-                logging.info(f"No {table} to check.")
-                return
-
-            logging.info(f"Checking {len(items)} {table}.")
-            tasks = [self._run_with_semaphore(check_function, item[1]) for item in items]
-            await asyncio.gather(*tasks)
-        except Exception as e:
-            logging.error(f"An error occurred in _check_items ({table}): {e}")
-
-    async def _scanComments(self, post_name, proxy=None):
-        # Chạy _process_post trong một luồng riêng
-        await asyncio.get_event_loop().run_in_executor(
-            self.thread_pool,  # Sử dụng ThreadPoolExecutor
-            self._run_process_post,  # Gọi hàm wrapper
-            post_name, proxy, "posts"
+        # Cập nhật thông tin post
+        db.bulk_update(
+            'posts',
+            [{
+                'post_name': post_name,
+                'reaction_count': crawler.reaction_count,
+                'comment_count': crawler.comment_count,
+                'last_comment': comments[0]['created_time'] if comments else None
+            }],
+            'post_name'
         )
 
-    def _run_process_post(self, post_name, proxy, update_table):
-        # Tạo một event loop mới trong luồng riêng
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(self._process_post(post_name, proxy, update_table))
-        except Exception as e:
-            logging.error(f"Error in _run_process_post: {e}")
-        finally:
-            loop.close()
+        
+        if comments:
+            comment_data = db.fetch_data('comments')
+            existing_comment_ids = {c[0] for c in comment_data}  # Giả sử comment_id nằm ở vị trí đầu tiên trong tuple
 
-    async def _process_post(self, post_name, proxy, update_table, delay=0):
-        try:
-            logging.info(f"Scanning comments for post: {post_name}")
-            data = self.db.fetch_data('posts', condition=f"post_name = '{post_name}'")
-
-            if not data:
-                return
-
-            username, post_url = data[0][9], data[0][2]
-
-            try:
-                crawler = FacebookCrawler(url=post_url, proxy=proxy)
-                reaction_count, comment_count, comments = crawler.reaction_count, crawler.comment_count, crawler.getComments()
-            except Exception as e:
-                cookies = self.db.fetch_data('cookies', condition="username = 'admin' AND status = 'live'")
-                cookie = random.choice(cookies)[1]
-                crawler = FacebookCrawler(url=post_url, cookie=cookie, proxy=proxy)
-                reaction_count, comment_count, comments = crawler.getComments()
-                if comments is None:
-                    return
-
-            last_comment = comments[0]['created_time'] if comments else None
-            self.db.bulk_update(update_table, [{'post_name': post_name, 'reaction_count': reaction_count, 'comment_count': comment_count, 'last_comment': last_comment}], 'post_name')
-
-            tasks = [self._insert_comment(comment, post_name, username) for comment in comments]
-            await asyncio.gather(*tasks)
-
-            logging.info(f"Finished scanning comments for post: {post_name}")
-        except Exception as e:
-            logging.error(f"An error occurred while scanning comments for post {post_name}: {e}")
-
-    async def _insert_comment(self, comment, post_name, username):
-        try:
-            comment_id = comment['comment_id']
-            if self.db.fetch_data('comments', condition=f"comment_id = '{comment_id}'"):
-                logging.info(f"Comment {comment_id} already exists, skipping.")
-                return
-
-            self.db.add_data(
+            # Lọc ra các comment chưa có trong database
+            new_comments = [
+                (c['comment_id'], crawler.id, post_name, c['author_id'], c['author_name'], 
+                c['author_avatar'], c['content'], '', '', c['created_time'], username)
+                for c in comments if c['comment_id'] not in existing_comment_ids
+            ]
+            db.add_data(
                 'comments',
-                ['comment_id', 'post_id', 'post_name', 'author_id', 'author_name', 'author_avatar', 'content', 'created_time', 'username'],
-                [(comment['comment_id'], comment['post_id'], post_name, comment['author_id'], comment['author_name'], comment['author_avatar'], comment['content'], comment['created_time'], username)]
+                ['comment_id', 'post_id', 'post_name', 'author_id', 'author_name', 
+                 'author_avatar', 'content', 'info', 'phone_number', 'created_time', 'username'],
+                new_comments
             )
-        except Exception as e:
-            logging.error(f"Error inserting comment {comment['comment_id']}: {e}")
+            print(f"[{datetime.now()}] 💾 Đã lưu {len(new_comments)} comment mới cho {post_name}")
 
-    async def _checkCookie(self, cookie):
+        db.close()
+        sleep(delay/1000)  # Convert ms to seconds
+        print(f"[{datetime.now()}] ⏳ Hoàn thành xử lý {post_name}. Tạm dừng {delay}ms")
+
+    except Exception as e:
+        print(f"\n[{datetime.now()}] ❌ Lỗi khi xử lý {post_name}:")
+        traceback.print_exc()
+        sleep(10)  # Tránh spam lỗi
+
+def process_post(post_data):
+    while True:
         try:
-            fb = FacebookAuthencation(cookie)
-            if not fb.user_id:
-                self.db.bulk_update('cookies', [{'cookie': cookie, 'status': 'die'}], 'cookie')
-        except Exception as e:
-            logging.error(f"Error checking cookie {cookie}: {e}")
+            # Lấy dữ liệu mới nhất mỗi lần lặp
+            post_name = post_data[1]
+            url = post_data[2]
+            username = post_data[-1]
+            delay = post_data[-3]
 
-    async def _checkProxy(self, proxy):
+            db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+            tokens = db.fetch_data('tokens') or []
+            cookies = db.fetch_data('cookies') or []
+            proxies = db.fetch_data('proxies') or []
+            db.close()
+
+            # Random chọn proxy
+            proxy = random.choice(proxies)[0] if proxies else None
+            
+            # Random chọn token hoặc cookie
+            auth = None
+            if tokens or cookies:
+                if tokens and cookies:
+                    auth = random.choice(["token", "cookie"])
+                else:
+                    auth = "token" if tokens else "cookie"
+                
+                if auth == "token":
+                    token = random.choice(tokens)[1]
+                    cookie = None
+                else:
+                    cookie = random.choice(cookies)[1]
+                    token = None
+
+            threading.Thread(target=comment_progress, args=(url, post_name, username, delay, token, cookie, proxy)).start()
+            sleep(delay/1000)  # Convert ms to seconds
+
+        except Exception as e:
+            print(f"\n[{datetime.now()}] ❌ Lỗi luồng xử lý {post_data[1]}:")
+            traceback.print_exc()
+            sleep(5)  # Đợi 5s trước khi thử lại
+
+def cookie_progress(cookie, cookie_id, proxy):
+    db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+    
+    gettoken = FacebookTokenExtractor('EAAAAAY', proxy=proxy)
+    try:
+        token = gettoken.get_login(cookie)['access_token']
+        db.bulk_update(
+            'tokens',
+            [{'token_id': cookie_id, 'token': token}],
+            'token_id'
+        )
+    except:
+        db.bulk_update(
+            'cookies',
+            [{'cookie_id': cookie_id, 'status': 'die'}],
+            'cookie_id'
+        )
+
+    db.close()
+
+def progress_cookie():
+    db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+    while True:
+        threads = []
+        proxies = db.fetch_data('proxies') or []
+        proxy = random.choice(proxies)[0] if proxies else None
+
+        cookies = db.fetch_data('cookies')
+        for ck in cookies:
+            cookie = ck[1]
+            cookie_id = ck[0]
+            t = threading.Thread(target=cookie_progress, args=(cookie, cookie_id, proxy))
+            threads.append(t)
+            t.start()
+        
+        for t in threads:
+            t.join()
+
+        sleep(300)
+
+def main():
+    print(f"[{datetime.now()}] 🚀 Khởi động hệ thống...")
+    threading.Thread(target=progress_cookie).start()
+    while True:
         try:
-            if not CheckProxies.check(proxy):
-                self.db.bulk_update('proxies', [{'proxy': proxy, 'status': 'unactive'}], 'proxy')
-        except Exception as e:
-            logging.error(f"Error checking proxy {proxy}: {e}")
+            # Lấy danh sách post mới mỗi 30 giây
+            db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+            current_posts = {post[1]: post for post in db.fetch_data('posts')}
+            db.close()
 
-    def _get_proxy(self, username=None):
-        try:
-            proxies = self.db.fetch_data('proxies', condition=f"username = '{username}' AND status = 'Active'") if username else []
-            if not proxies:
-                proxies = self.db.fetch_data('proxies', condition="username = 'admin' AND status = 'Active'")
-            return random.choice(proxies)[0] if proxies else None
-        except Exception as e:
-            logging.error(f"Error fetching proxy for username {username}: {e}")
-            return None
+            # Kiểm tra và tạo luồng mới
+            active_threads = {t.name: t for t in threading.enumerate() if isinstance(t, threading.Thread)}
+            
+            for post_name, post in current_posts.items():
+                if post_name not in active_threads:
+                    print(f"[{datetime.now()}] 🧵 Tạo luồng mới cho: {post_name}")
+                    thread = threading.Thread(
+                        target=process_post, 
+                        args=(post,),
+                        name=post_name,
+                        daemon=True
+                    )
+                    thread.start()
 
+            sleep(30)  # Cập nhật danh sách post mỗi 30 giây
+
+        except Exception as e:
+            print(f"\n[{datetime.now()}] ❌ Lỗi chính:")
+            traceback.print_exc()
+            sleep(60)
 
 if __name__ == "__main__":
-    cron = CronJob()
-    asyncio.run(cron.run())
+    main()

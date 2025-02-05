@@ -2,6 +2,24 @@ import requests, time, base64, threading, re
 import json
 from bs4 import BeautifulSoup
 from utils import *
+import uuid
+from urllib.parse import urlparse, parse_qs, unquote
+from datetime import datetime
+
+def iso_to_timestamp(iso_time):
+    dt = datetime.strptime(iso_time, "%Y-%m-%dT%H:%M:%S%z")  # Chuyển ISO 8601 sang datetime
+    return int(dt.timestamp())
+
+class CheckProxies:
+    @staticmethod
+    def check(proxy: str):
+        try:
+            proxys = proxy.split(':')
+            proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
+            response = requests.get('https://api64.ipify.org?format=json', proxies=proxies).json()
+            return True
+        except:
+            return False
 
 class FacebookCrawler:
     def __init__(self, url: str, cookie: str = None, proxy: str = None):
@@ -9,8 +27,12 @@ class FacebookCrawler:
 
         self.proxy = proxy
         if proxy:
-            proxys = proxy.split(':')
-            self.proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
+            proxy_parts = proxy.split(":")
+            if len(proxy_parts) == 2:
+                self.proxies = {"http": f"http://{proxy}", "https": f"https://{proxy}"}
+            elif len(proxy_parts) == 4:
+                ip, port, user, password = proxy_parts
+                self.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"https://{user}:{password}@{ip}:{port}"}
         else:
             self.proxies = None
 
@@ -59,7 +81,6 @@ class FacebookCrawler:
             self.get_url()
             
         self.id = self.getId()
-        self.getCount()
 
     def get_url(self):
         self.url = self.session.get(self.url, cookies=self.cookies, proxies=self.proxies).url
@@ -152,8 +173,9 @@ class FacebookCrawler:
     def getId(self) -> str:
         # Lấy id của post
         post = self.session.get(self.url, cookies=self.cookies, proxies=self.proxies).text
+        self.owner_id = post.split('[{"__typename":"User","id":"')[1].split('"')[0]
+
         if 'reel' in self.url:
-            self.owner_id = post.split('"owner":{"__typename":"User","id":"')[1].split('"')[0]
             self.id_reel = post.split(',"initial_node_id":')[1].split(',')[0]
         try:
             id = post.split('"post_id":"')[1].split('"')[0]
@@ -227,7 +249,6 @@ class FacebookCrawler:
             self.comment_count = int(response.text.split('"comments":{"total_count":')[1].split('}')[0])
 
         return (self.reaction_count, self.comment_count)
-    
 
 class FacebookAuthencation:
     def __init__(self, cookie: str, proxy: str = None):
@@ -274,17 +295,7 @@ class FacebookAuthencation:
         except:
 
             return 
-
-class CheckProxies:
-    @staticmethod
-    def check(proxy: str):
-        try:
-            proxys = proxy.split(':')
-            proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
-            response = requests.get('https://api64.ipify.org?format=json', proxies=proxies).json()
-            return True
-        except:
-            return False
+            
 
 class FacebookToken:
     def __init__(self, token: str, proxy: str = None):
@@ -305,6 +316,198 @@ class FacebookToken:
         return response['id'] if 'id' in response else 'Invalid Token'
 
     def get_cookie(self) -> str:
-        sub=requests.post('https://graph.facebook.com/auth/create_session_for_app', data={"locale": "vi_VN","format": "json","new_app_id": "275254692598279","access_token": self.token,"generate_session_cookies":"1"}, proxies=self.proxies)
-        return sub.text
+        sub=requests.post('https://graph.facebook.com/auth/create_session_for_app', data={"locale": "vi_VN","format": "json","new_app_id": "6628568379","access_token": self.token,"generate_session_cookies":"1"}, proxies=self.proxies)
+        cookie = ''
+        for ck in sub.json()['session_cookies']:
+            cookie += f'{ck["name"]}={ck["value"]};'
+        return cookie
     
+    def getComments(self, object_id: str = '123456789_123456789') -> list:
+        response = requests.get(
+            'https://graph.facebook.com/'+object_id+'/comments?order=reverse_chronological&fields=from{id,name,picture},message,created_time&access_token='+self.token,
+            proxies=self.proxies,
+        )
+        response = json.loads(response.text)
+
+        comments = []
+
+        for comment in response['data']:
+            comment_id = comment['id'].split('_')[1]
+            post_id = comment['id'].split('_')[0]
+            author_name = comment['from']['name']
+            author_id = comment['from']['id']
+            author_url = f'https://www.facebook.com/{author_id}'
+            author_avatar = comment['from']['picture']['data']['url']
+            content = comment['message'] if 'message' in comment else ''
+            created_time = iso_to_timestamp(comment['created_time'])
+
+            comment_data = {
+                'comment_id': comment_id,
+                'post_id': post_id,
+                'author_name': author_name,
+                'author_id': author_id,
+                'author_url': author_url,
+                'author_avatar': author_avatar,
+                'content': content,
+                'created_time': int(created_time),
+            }
+            comments.append(comment_data)
+        
+        return comments
+    
+    def getCount(self, object_id) -> tuple:
+        response = requests.get(
+            'https://graph.facebook.com/'+object_id+'/?fields=reactions.summary(true),comments.summary(true)&access_token=' + self.token,
+            proxies=self.proxies
+        )
+
+        response = json.loads(response.text)
+        reactions = response['reactions']['summary']['total_count'] if 'reactions' in response else 0
+        comments = response['comments']['summary']['total_count'] if 'comments' in response else 0
+        return reactions, comments
+
+
+TOKEN_TO_APP_ID = {
+    "EAAAAAY": "6628568379"
+}
+
+class FacebookTokenExtractor:
+    def __init__(self, token_type: str, proxy: str = None):
+        self.app_id = TOKEN_TO_APP_ID.get(token_type)
+        if not self.app_id:
+            raise ValueError("Invalid token type")
+        self.session = requests.Session()
+        self.session.headers.update({
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'accept-language': 'vi,en;q=0.9,vi-VN;q=0.8,fr-FR;q=0.7,fr;q=0.6,en-US;q=0.5',
+            'cache-control': 'max-age=0',
+            'dpr': '1',
+            'priority': 'u=0, i',
+            'sec-ch-prefers-color-scheme': 'dark',
+            'sec-ch-ua': '"Not A(Brand";v="8", "Chromium";v="132", "Google Chrome";v="132"',
+            'sec-ch-ua-full-version-list': '"Not A(Brand";v="8.0.0.0", "Chromium";v="132.0.6834.160", "Google Chrome";v="132.0.6834.160"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-model': '""',
+            'sec-ch-ua-platform': '"Windows"',
+            'sec-ch-ua-platform-version': '"15.0.0"',
+            'sec-fetch-dest': 'document',
+            'sec-fetch-mode': 'navigate',
+            'sec-fetch-site': 'none',
+            'sec-fetch-user': '?1',
+            'upgrade-insecure-requests': '1',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+        })
+        if proxy:
+            self.set_proxy(proxy)
+    
+    def set_proxy(self, proxy: str):
+        proxy_parts = proxy.split(":")
+        if len(proxy_parts) == 2:
+            self.session.proxies = {"http": f"http://{proxy}", "https": f"https://{proxy}"}
+        elif len(proxy_parts) == 4:
+            ip, port, user, password = proxy_parts
+            self.session.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"https://{user}:{password}@{ip}:{port}"}
+
+    def change_cookies_fb(self, cookie: str):
+        cookies = {}
+        cks = cookie.replace(' ','').split(';')
+        for ck in cks:
+            try:
+                key, value = ck.split('=')
+                cookies[key] = value
+            except:
+                break
+        return cookies
+
+    def get_token(self, fb_dtsg: str, lsd: str, cookies: dict, c_user: str):
+        headers = {
+                'authority': 'www.facebook.com',
+                'accept': '*/*',
+                'accept-language': 'vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5',
+                'content-type': 'application/x-www-form-urlencoded',
+                'dnt': '1',
+                'origin': 'https://www.facebook.com',
+                'sec-ch-ua': '"Chromium";v="117", "Not;A=Brand";v="8"',
+                'sec-ch-ua-full-version-list': '"Chromium";v="117.0.5938.157", "Not;A=Brand";v="8.0.0.0"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-model': '""',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-origin',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
+                'x-fb-friendly-name': 'useCometConsentPromptEndOfFlowBatchedMutation',
+        }
+        response = self.session.post('https://www.facebook.com/api/graphql/', data={
+            'av': str(c_user),
+            '__user': str(c_user),
+            'fb_dtsg': fb_dtsg,
+            'fb_api_caller_class': 'RelayModern',
+            'fb_api_req_friendly_name': 'useCometConsentPromptEndOfFlowBatchedMutation',
+            'variables': '{"input":{"client_mutation_id":"4","actor_id":"' + c_user + '","config_enum":"GDP_CONFIRM","device_id":null,"experience_id":"' + str(
+                uuid.uuid4()
+                ) + '","extra_params_json":"{\\"app_id\\":\\"' + self.app_id + '\\",\\"kid_directed_site\\":\\"false\\",\\"logger_id\\":\\"\\\\\\"' + str(
+                uuid.uuid4()
+                ) + '\\\\\\"\\",\\"next\\":\\"\\\\\\"confirm\\\\\\"\\",\\"redirect_uri\\":\\"\\\\\\"https:\\\\\\\\\\\\/\\\\\\\\\\\\/www.facebook.com\\\\\\\\\\\\/connect\\\\\\\\\\\\/login_success.html\\\\\\"\\",\\"response_type\\":\\"\\\\\\"token\\\\\\"\\",\\"return_scopes\\":\\"false\\",\\"scope\\":\\"[\\\\\\"user_subscriptions\\\\\\",\\\\\\"user_videos\\\\\\",\\\\\\"user_website\\\\\\",\\\\\\"user_work_history\\\\\\",\\\\\\"friends_about_me\\\\\\",\\\\\\"friends_actions.books\\\\\\",\\\\\\"friends_actions.music\\\\\\",\\\\\\"friends_actions.news\\\\\\",\\\\\\"friends_actions.video\\\\\\",\\\\\\"friends_activities\\\\\\",\\\\\\"friends_birthday\\\\\\",\\\\\\"friends_education_history\\\\\\",\\\\\\"friends_events\\\\\\",\\\\\\"friends_games_activity\\\\\\",\\\\\\"friends_groups\\\\\\",\\\\\\"friends_hometown\\\\\\",\\\\\\"friends_interests\\\\\\",\\\\\\"friends_likes\\\\\\",\\\\\\"friends_location\\\\\\",\\\\\\"friends_notes\\\\\\",\\\\\\"friends_photos\\\\\\",\\\\\\"friends_questions\\\\\\",\\\\\\"friends_relationship_details\\\\\\",\\\\\\"friends_relationships\\\\\\",\\\\\\"friends_religion_politics\\\\\\",\\\\\\"friends_status\\\\\\",\\\\\\"friends_subscriptions\\\\\\",\\\\\\"friends_videos\\\\\\",\\\\\\"friends_website\\\\\\",\\\\\\"friends_work_history\\\\\\",\\\\\\"ads_management\\\\\\",\\\\\\"create_event\\\\\\",\\\\\\"create_note\\\\\\",\\\\\\"export_stream\\\\\\",\\\\\\"friends_online_presence\\\\\\",\\\\\\"manage_friendlists\\\\\\",\\\\\\"manage_notifications\\\\\\",\\\\\\"manage_pages\\\\\\",\\\\\\"photo_upload\\\\\\",\\\\\\"publish_stream\\\\\\",\\\\\\"read_friendlists\\\\\\",\\\\\\"read_insights\\\\\\",\\\\\\"read_mailbox\\\\\\",\\\\\\"read_page_mailboxes\\\\\\",\\\\\\"read_requests\\\\\\",\\\\\\"read_stream\\\\\\",\\\\\\"rsvp_event\\\\\\",\\\\\\"share_item\\\\\\",\\\\\\"sms\\\\\\",\\\\\\"status_update\\\\\\",\\\\\\"user_online_presence\\\\\\",\\\\\\"video_upload\\\\\\",\\\\\\"xmpp_login\\\\\\"]\\",\\"steps\\":\\"{}\\",\\"tp\\":\\"\\\\\\"unspecified\\\\\\"\\",\\"cui_gk\\":\\"\\\\\\"[PASS]:\\\\\\"\\",\\"is_limited_login_shim\\":\\"false\\"}","flow_name":"GDP","flow_step_type":"STANDALONE","outcome":"APPROVED","source":"gdp_delegated","surface":"FACEBOOK_COMET"}}',
+            'server_timestamps': 'true',
+            'doc_id': '6494107973937368',
+        }, cookies=cookies, headers=headers)
+        try:
+            json_response = response.json()
+            print(json_response)
+            uri = json_response["data"]["run_post_flow_action"]["uri"]
+            fragment = urlparse(unquote(parse_qs(urlparse(uri).query)["close_uri"][0])).fragment
+            return parse_qs(fragment).get("access_token", [None])[0]
+        except Exception as e:
+            return None
+
+    def get_login(self, cookie: str):
+        cookies = self.change_cookies_fb(cookie)
+        response = self.session.get('https://www.facebook.com/', cookies=cookies)
+        try:
+            id_user = response.text.split('"actorId":"')[1].split('"')[0]
+            if id_user == "0":
+                return {"login": False}
+            fb_dtsg = response.text.split('"DTSGInitialData",[],{"token":"')[1].split('"')[0]
+            lsd = response.text.split('"LSD",[],{"token":"')[1].split('"')[0]
+            access_token = self.get_token(fb_dtsg, lsd, cookies, id_user)
+            return {"login": True, "access_token": access_token}
+        except Exception as e:
+            return {"error": str(e)}
+        
+def run_hidden(cookie, fb_dtsg, lsd, comment_id, i_user) -> None:
+    headers = {
+        'authority': 'www.beta.facebook.com',
+        'accept': '*/*',
+        'accept-language': 'vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5',
+        'content-type': 'application/x-www-form-urlencoded',
+        'dnt': '1',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-model': '""',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'cookie': cookie,
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
+        'x-fb-friendly-name': 'CometUFIHideCommentMutation',
+        'x-fb-lsd': lsd,
+    }
+    data = {
+        'av': i_user,
+        '__aaid': '0',
+        '__user': i_user,
+        '__a': '1',
+        'dpr': '1',
+        '__ccg': 'EXCELLENT',
+        '__comet_req': '15',
+        'fb_dtsg': fb_dtsg,
+        'lsd': lsd,
+        '__spin_b': 'trunk',
+        'fb_api_caller_class': 'RelayModern',
+        'fb_api_req_friendly_name': 'CometUFIHideCommentMutation',
+        'variables': '{"input":{"comment_id":"' + comment_id + '","feedback_source":110,"hide_location":"UFI","site":"comet","actor_id":"' + i_user + '","client_mutation_id":"2"},"feedLocation":"DEDICATED_COMMENTING_SURFACE","useDefaultActor":false,"scale":1}',
+        'server_timestamps': 'true',
+        'doc_id': '27837125255886039',
+    }
+    response = requests.post(
+        'https://www.beta.facebook.com/api/graphql/', headers=headers, data=data
+    ).text
