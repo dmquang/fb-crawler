@@ -29,10 +29,10 @@ class FacebookCrawler:
         if proxy:
             proxy_parts = proxy.split(":")
             if len(proxy_parts) == 2:
-                self.proxies = {"http": f"http://{proxy}", "https": f"https://{proxy}"}
+                self.proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
             elif len(proxy_parts) == 4:
                 ip, port, user, password = proxy_parts
-                self.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"https://{user}:{password}@{ip}:{port}"}
+                self.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"http://{user}:{password}@{ip}:{port}"}
         else:
             self.proxies = None
 
@@ -174,6 +174,8 @@ class FacebookCrawler:
         # Lấy id của post
         post = self.session.get(self.url, cookies=self.cookies, proxies=self.proxies).text
         self.owner_id = post.split('[{"__typename":"User","id":"')[1].split('"')[0]
+        if 'videos' in self.url:
+            self.owner_id = post.split('{"actors":[{"__typename":"User","__isActor":"User","id":"')[1].split('"')[0] + '='
 
         if 'reel' in self.url:
             self.id_reel = post.split(',"initial_node_id":')[1].split(',')[0]
@@ -304,10 +306,10 @@ class FacebookToken:
         if proxy:
             proxy_parts = proxy.split(":")
             if len(proxy_parts) == 2:
-                self.proxies = {"http": f"http://{proxy}", "https": f"https://{proxy}"}
+                self.proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
             elif len(proxy_parts) == 4:
                 ip, port, user, password = proxy_parts
-                self.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"https://{user}:{password}@{ip}:{port}"}
+                self.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"http://{user}:{password}@{ip}:{port}"}
         else:
             self.proxies = None
 
@@ -323,12 +325,16 @@ class FacebookToken:
         return cookie
     
     def getComments(self, object_id: str = '123456789_123456789') -> list:
+        if '=' in object_id:
+            object_id = object_id.split('_')[1]
+
+        url = 'https://graph.facebook.com/'+object_id+'/comments?order=reverse_chronological&fields=from{id,name,picture},message,created_time&access_token='+self.token
         response = requests.get(
-            'https://graph.facebook.com/'+object_id+'/comments?order=reverse_chronological&fields=from{id,name,picture},message,created_time&access_token='+self.token,
+            url,
+            cookies={'cookie': self.get_cookie()},
             proxies=self.proxies,
         )
         response = json.loads(response.text)
-
         comments = []
 
         for comment in response['data']:
@@ -337,7 +343,10 @@ class FacebookToken:
             author_name = comment['from']['name']
             author_id = comment['from']['id']
             author_url = f'https://www.facebook.com/{author_id}'
-            author_avatar = comment['from']['picture']['data']['url']
+            try:
+                author_avatar = comment['from']['picture']['data']['url']
+            except:
+                author_avatar = comment['from']['picture']
             content = comment['message'] if 'message' in comment else ''
             created_time = iso_to_timestamp(comment['created_time'])
 
@@ -363,7 +372,10 @@ class FacebookToken:
 
         response = json.loads(response.text)
         reactions = response['reactions']['summary']['total_count'] if 'reactions' in response else 0
-        comments = response['comments']['summary']['total_count'] if 'comments' in response else 0
+        try:
+            comments = response['comments']['summary']['total_count'] if 'comments' in response else 0
+        except:
+            comments = response['comments']['count'] if 'comments' in response else 0
         return reactions, comments
 
 
@@ -403,10 +415,10 @@ class FacebookTokenExtractor:
     def set_proxy(self, proxy: str):
         proxy_parts = proxy.split(":")
         if len(proxy_parts) == 2:
-            self.session.proxies = {"http": f"http://{proxy}", "https": f"https://{proxy}"}
+            self.session.proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
         elif len(proxy_parts) == 4:
             ip, port, user, password = proxy_parts
-            self.session.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"https://{user}:{password}@{ip}:{port}"}
+            self.session.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"http://{user}:{password}@{ip}:{port}"}
 
     def change_cookies_fb(self, cookie: str):
         cookies = {}
@@ -453,7 +465,6 @@ class FacebookTokenExtractor:
         }, cookies=cookies, headers=headers)
         try:
             json_response = response.json()
-            print(json_response)
             uri = json_response["data"]["run_post_flow_action"]["uri"]
             fragment = urlparse(unquote(parse_qs(urlparse(uri).query)["close_uri"][0])).fragment
             return parse_qs(fragment).get("access_token", [None])[0]

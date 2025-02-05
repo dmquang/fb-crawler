@@ -483,47 +483,45 @@ def add_post():
         proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND username = '{username}' AND status = 'Active'")
         proxy = random.choice(proxies)[0] if proxies != [] else None
 
-        # Random chọn token hoặc cookie
-        tokens = db.fetch_data('tokens') or []
-        cookies = db.fetch_data('cookies') or []
-        auth = None
-        if tokens or cookies:
-            if tokens and cookies:
-                auth = random.choice(["token", "cookie"])
-            else:
-                auth = "token" if tokens else "cookie"
-            
-            if auth == "token":
-                token = random.choice(tokens)[1]
-                cookie = None
-            else:
-                cookie = random.choice(cookies)[1]
-                token = None
-        
-        # Xử lý token và cookie
-        if token:
-            print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
-            fbtk = FacebookToken(token=token, proxy=proxy)
-            cookie = fbtk.get_cookie()
-            print(f"[{datetime.now()}] 🍪 Đã lấy cookie từ token cho {post_name}")
-        
         try:
-            crawler = FacebookCrawler(post_url, cookie, proxy)
+            crawler = FacebookCrawler(post_url, proxy)
             crawler.getCount()
             comment_count = crawler.comment_count
             reaction_count = crawler.reaction_count
             # Thêm comment vào database
             comments = crawler.getComments()
+
         except:
-            if not token:
-                gettoken = FacebookTokenExtractor('EAAAAAY', proxy)
-                token = gettoken.get_login(cookie)['access_token']
+            # Random chọn token hoặc cookie
+            tokens = db.fetch_data('tokens') or []
+            token = None
+            cookies = db.fetch_data('cookies') or []
+
+            if tokens:
+                token = random.choice(tokens)[1]
             
-            fbtk = FacebookToken(token=token, proxy=proxy)
-            cookie = fbtk.get_cookie()
-            crawler = FacebookCrawler(post_url, cookie, proxy)
-            comment_count, reaction_count = fbtk.getCount(crawler.owner_id + '_' + crawler.id)
-            comments = fbtk.getComments(crawler.owner_id + '_' + crawler.id)
+            if cookies:
+                cookie = random.choice(cookies)[1]
+            
+            # Xử lý token và cookie
+            if token:
+                print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+                fbtk = FacebookToken(token=token, proxy=proxy)
+                cookie = fbtk.get_cookie()
+                print(f"[{datetime.now()}] 🍪 Đã lấy cookie từ token cho {post_name}")
+                fbtk = FacebookToken(token=token, proxy=proxy)
+                cookie = fbtk.get_cookie()
+                crawler = FacebookCrawler(post_url, cookie, proxy)
+                comment_count, reaction_count = fbtk.getCount(crawler.owner_id + '_' + crawler.id)
+                comments = fbtk.getComments(crawler.owner_id + '_' + crawler.id)
+            else:
+                crawler = FacebookCrawler(post_url, cookie, proxy)
+                crawler.getCount()
+                comment_count = crawler.comment_count
+                reaction_count = crawler.reaction_count
+                # Thêm comment vào database
+                comments = crawler.getComments()
+            
 
         if comments:
             comment_data = db.fetch_data('comments')
@@ -791,426 +789,6 @@ def delete_user():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/verify-token')
-def verify_token():
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'valid': False}), 401
-        
-    try:
-        token = auth_header.split(" ")[1]
-        jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        return jsonify({'valid': True}), 200
-    except:
-        return jsonify({'valid': False}), 401
-
-@app.route('/api/admin/user-details/<username>')
-@admin_required
-def get_user_details(username):
-    try:
-        # Get user info from admin database
-        admin_db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='admin')
-        user_sql = "SELECT * FROM users WHERE username = %s"
-        user_info = admin_db.execute_query(user_sql, (username,))
-        
-        if not user_info:
-            return jsonify({'error': 'User not found'}), 404
-            
-        user_data = {
-            'username': user_info[0][0],
-            'link_scan_limit': user_info[0][2],
-            'link_follow_limit': user_info[0][3],
-            'link_hide_limit': user_info[0][4],
-            'expire_time': user_info[0][5]
-        }
-
-        # Switch to user database for posts and comments
-        user_db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-        # Get active posts
-        posts_sql = """
-            SELECT * FROM posts 
-            WHERE username = %s AND status != 'stopped'
-            ORDER BY time_created DESC
-        """
-        posts = user_db.execute_query(posts_sql, (username,))
-        
-        # Get stopped posts
-        stopped_sql = """
-            SELECT * FROM stopped_posts 
-            WHERE username = %s 
-            ORDER BY stopped_time DESC
-        """
-        stopped_posts = user_db.execute_query(stopped_sql, (username,))
-        
-        # Get deleted posts
-        deleted_sql = """
-            SELECT * FROM deleted_posts 
-            WHERE username = %s 
-            ORDER BY deleted_time DESC
-        """
-        deleted_posts = user_db.execute_query(deleted_sql, (username,))
-        
-        # Get active comments
-        comments_sql = """
-            SELECT * FROM comments 
-            WHERE username = %s 
-            ORDER BY created_time DESC
-        """
-        comments = user_db.execute_query(comments_sql, (username,))
-        
-        # Get deleted comments
-        deleted_comments_sql = """
-            SELECT * FROM deleted_comments 
-            WHERE username = %s 
-            ORDER BY deleted_time DESC
-        """
-        deleted_comments = user_db.execute_query(deleted_comments_sql, (username,))
-        user_db.close()
-        return jsonify({
-            'user': user_data,
-            'posts': [{
-                'id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'last_comment': p[6],
-                'delay': p[7],
-                'status': p[8]
-            } for p in posts],
-            'stopped_posts': [{
-                'id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'last_comment': p[6],
-                'delay': p[7],
-                'status': p[8],
-                'stopped_time': p[10] if len(p) > 10 else None
-            } for p in stopped_posts],
-            'deleted_posts': [{
-                'id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'deleted_time': p[10] if len(p) > 10 else None
-            } for p in deleted_posts],
-            'comments': [{
-                'id': c[0],
-                'post_id': c[1],
-                'author_id': c[2],
-                'author_name': c[3],
-                'content': c[5],
-                'created_time': c[8]
-            } for c in comments],
-            'deleted_comments': [{
-                'id': c[0],
-                'post_id': c[1],
-                'author_id': c[2],
-                'author_name': c[3],
-                'content': c[5],
-                'created_time': c[8],
-                'deleted_time': c[9]
-            } for c in deleted_comments]
-        }), 200
-        
-    except Exception as e:
-        print(f"Error getting user details: {str(e)}")  # Debug log
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/tables/<username>')
-@admin_required
-def get_user_tables(username):
-    try:
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-        # Get active posts
-        posts_sql = """
-            SELECT * FROM posts 
-            WHERE username = %s 
-            ORDER BY time_created DESC
-        """
-        posts = db.execute_query(posts_sql, (username,))
-        
-        # Get stopped posts
-        stopped_sql = """
-            SELECT * FROM stopped_posts 
-            WHERE username = %s 
-            ORDER BY stopped_time DESC
-        """
-        stopped_posts = db.execute_query(stopped_sql, (username,))
-        
-        # Get deleted posts
-        deleted_posts_sql = """
-            SELECT * FROM deleted_posts 
-            WHERE username = %s 
-            ORDER BY deleted_time DESC
-        """
-        deleted_posts = db.execute_query(deleted_posts_sql, (username,))
-        
-        # Get active comments
-        comments_sql = """
-            SELECT * FROM comments 
-            WHERE username = %s 
-            ORDER BY created_time DESC
-        """
-        comments = db.execute_query(comments_sql, (username,))
-        
-        # Get deleted comments
-        deleted_comments_sql = """
-            SELECT * FROM deleted_comments 
-            WHERE username = %s 
-            ORDER BY deleted_time DESC
-        """
-        deleted_comments = db.execute_query(deleted_comments_sql, (username,))
-        
-        # Get user cookies
-        cookies_sql = """
-            SELECT * FROM cookies 
-            WHERE username = %s
-        """
-        cookies = db.execute_query(cookies_sql, (username,))
-        db.close()
-        return jsonify({
-            'active_posts': [{
-                'post_id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'last_comment': p[6],
-                'delay': p[7],
-                'status': p[8]
-            } for p in posts],
-            'stopped_posts': [{
-                'post_id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'last_comment': p[6],
-                'delay': p[7],
-                'status': p[8],
-                'stopped_time': p[10]
-            } for p in stopped_posts],
-            'deleted_posts': [{
-                'post_id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'last_comment': p[6],
-                'delay': p[7],
-                'status': p[8],
-                'deleted_time': p[10]
-            } for p in deleted_posts],
-            'comments': [{
-                'comment_id': c[0],
-                'post_id': c[1],
-                'author_id': c[2],
-                'author_name': c[3],
-                'author_avatar': c[4],
-                'content': c[5],
-                'info': c[6],
-                'phone_number': c[7],
-                'created_time': c[8]
-            } for c in comments],
-            'deleted_comments': [{
-                'comment_id': c[0],
-                'post_id': c[1],
-                'author_id': c[2],
-                'author_name': c[3],
-                'author_avatar': c[4],
-                'content': c[5],
-                'info': c[6],
-                'phone_number': c[7],
-                'created_time': c[8],
-                'deleted_time': c[10]
-            } for c in deleted_comments],
-            'cookies': [{
-                'cookie_id': c[0],
-                'cookie': c[1],
-                'status': c[2]
-            } for c in cookies]
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/all-data')
-@admin_required
-def get_all_data():
-    try:
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-        # Get all posts with usernames
-        all_posts_sql = """
-            SELECT p.*, u.username 
-            FROM posts p
-            LEFT JOIN admin.users u ON p.username = u.username
-            ORDER BY p.time_created DESC
-        """
-        posts = db.execute_query(all_posts_sql)
-        
-        # Get all comments with usernames
-        all_comments_sql = """
-            SELECT c.*, u.username 
-            FROM comments c
-            LEFT JOIN admin.users u ON c.username = u.username
-            ORDER BY c.created_time DESC
-        """
-        comments = db.execute_query(all_comments_sql)
-        db.close()
-        return jsonify({
-            'posts': [{
-                'post_id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'last_comment': p[6],
-                'delay': p[7],
-                'status': p[8],
-                'username': p[9]
-            } for p in posts],
-            'comments': [{
-                'comment_id': c[0],
-                'post_id': c[1],
-                'author_id': c[2],
-                'author_name': c[3],
-                'author_avatar': c[4],
-                'content': c[5],
-                'info': c[6],
-                'phone_number': c[7],
-                'created_time': c[8],
-                'username': c[9]
-            } for c in comments]
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/all-posts')
-@admin_required
-def get_all_posts():
-    try:
-        # Lấy username từ token
-        username = get_current_username()  # Giả sử bạn có hàm này để lấy username từ token
-
-        # Kết nối tới database user
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-        print(f"Fetching all posts for user: {username} from user database...")
-        
-        # Lấy tất cả posts của user
-        posts_sql = """
-            SELECT * FROM userposts 
-            WHERE username = %s AND status != 'stopped'
-            ORDER BY time_created DESC
-        """
-        posts = db.execute_query(posts_sql, (username,))
-        db.close()
-        print(f"Found {len(posts) if posts else 0} active posts for user: {username}")
-        
-        return jsonify({
-            'posts': [{
-                'id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'last_comment': p[6],
-                'delay': p[7],
-                'status': p[8],
-                'username': p[9]
-            } for p in posts]
-        }), 200
-        
-    except Exception as e:
-        print(f"Error in get_all_posts: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/all-comments')
-@admin_required
-def get_all_comments():
-    try:
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-        print("Fetching all comments from user database...")
-        
-        # Lấy tất cả comments và join với posts để lấy tên post, không cần JOIN với admin.users
-        comments = db.fetch_data('comments')
-        db.close()
-        
-        print(f"Found {len(comments) if comments else 0} comments")
-        
-        return jsonify({
-            'comments': [{
-                'id': c[0],
-                'post_id': c[1],
-                'post_name': c[2],
-                'author_id': c[3],
-                'author_name': c[4],
-                'author_avatar': c[5],
-                'content': c[6],
-                'info': c[7],
-                'phone_number': c[8],
-                'created_time': c[9],
-                'username': c[10] if len(c) > 10 else 'Unknown Post'
-            } for c in comments]
-        }), 200
-        
-    except Exception as e:
-        print(f"Error in get_all_comments: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/admin/all-stopped-posts')
-@admin_required
-def get_all_stopped_posts():
-    try:
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-        print("Fetching all stopped posts from user database...")
-        
-        # Lấy tất cả stopped posts, không cần JOIN với admin.users
-        stopped_posts_sql = """
-            SELECT * FROM stopped_posts 
-            ORDER BY stopped_time DESC
-        """
-        posts = db.execute_query(stopped_posts_sql)
-        
-        print(f"Found {len(posts) if posts else 0} stopped posts")
-        db.close()
-        return jsonify({
-            'stopped_posts': [{
-                'id': p[0],
-                'post_name': p[1],
-                'post_url': p[2],
-                'reaction_count': p[3],
-                'comment_count': p[4],
-                'time_created': p[5],
-                'last_comment': p[6],
-                'delay': p[7],
-                'status': p[8],
-                'username': p[9],
-                'stopped_time': p[10]
-            } for p in posts]
-        }), 200
-        
-    except Exception as e:
-        print(f"Error in get_all_stopped_posts: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
 def get_current_username():
     auth_header = request.headers.get('Authorization')
@@ -1294,32 +872,6 @@ def get_user_comments():
         print(f"Error in get_user_posts: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-
-
-@app.route('/api/posts/<post_name>', methods=['GET'])
-def get_post_details(post_name):
-    try:
-        db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-        # Fetch post details
-        post_sql = "SELECT * FROM posts WHERE post_name = %s"
-        post = db.execute_query(post_sql, (post_name,))
-        db.close()
-        if post:
-            return jsonify({
-                'post_id': post[0][0],
-                'post_name': post[0][1],
-                'post_url': post[0][2],
-                'reaction_count': post[0][3],
-                'comment_count': post[0][4],
-                'time_created': post[0][5],
-                'status': post[0][6],
-                'username': post[0][7]
-            }), 200
-        else:
-            return jsonify({'error': 'Post not found'}), 404
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/posts/off', methods=['GET'])
 def get_stopped_posts():
@@ -1527,7 +1079,7 @@ def user_tokens():
                 'token': t[1],
                 'status': t[2],
                 'username': t[3]
-            }] for t in data })
+            } for t in data ]})
         
         elif request.method == 'POST':
             username = request.get_json()['username']
@@ -1535,9 +1087,10 @@ def user_tokens():
             type = request.get_json()['type']
             
             proxy = None
-            proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
+            proxies = db.fetch_data('proxies', condition=f"status = 'Active'")
             if proxies != []:
                 proxy = random.choice(proxies)[0]
+            
 
             if type == 'token':
                 token = dataInput
