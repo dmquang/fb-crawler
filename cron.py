@@ -7,36 +7,42 @@ import random
 import traceback
 from datetime import datetime
 
-def comment_progress(url, post_name, username, delay, token=None, cookie=None, proxy=None):
+def comment_progress(url, post_name, post_id, username, delay, token=None, cookie=None, proxy=None):
     try:
         print(f"\n[{datetime.now()}] 🔄 Bắt đầu xử lý post: {post_name}")
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
         
-        # Xử lý token và cookie
-        if token:
-            print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
-            fbtk = FacebookToken(token=token, proxy=proxy)
-            cookie = fbtk.get_cookie()
-            print(f"[{datetime.now()}] 🍪 Đã lấy cookie từ token cho {post_name}")
-        
         try:
-            crawler = FacebookCrawler(url, cookie, proxy)
+            status = 'active'
+            # Lấy proxy từ database
+            proxies = db.fetch_data('proxies', condition=f"username = '{username}' AND status = 'Active'")
+            proxy = random.choice(proxies)[0] if proxies else None
+
+            # Khởi tạo FacebookCrawler
+            crawler = FacebookCrawler(url, proxy)
             crawler.getCount()
-            comment_count = crawler.comment_count
-            reaction_count = crawler.reaction_count
-            # Thêm comment vào database
+            comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
             comments = crawler.getComments()
-        except:
-            if not token:
-                gettoken = FacebookTokenExtractor('EAAAAAY', proxy)
-                token = gettoken.get_login(cookie)['access_token']
-            
-            fbtk = FacebookToken(token=token, proxy=proxy)
-            cookie = fbtk.get_cookie()
-            print(cookie)
-            crawler = FacebookCrawler(url, cookie, proxy)
-            comment_count, reaction_count = fbtk.getCount(crawler.owner_id + '_' + crawler.id)
-            comments = fbtk.getComments(crawler.owner_id + '_' + crawler.id)
+
+        except Exception:
+            status = 'privte'
+            # Nếu crawler thất bại, dùng token hoặc cookie
+            tokens = db.fetch_data('tokens') or []
+            cookies = db.fetch_data('cookies') or []
+            token = random.choice(tokens)[1] if tokens else None
+            cookie = random.choice(cookies)[1] if cookies else None
+
+            if token:
+                print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+                fbtk = FacebookToken(token=token, proxy=proxy)
+                cookie = fbtk.get_cookie()
+                comment_count, reaction_count = fbtk.getCount(post_id)
+                comments = fbtk.getComments(post_id)
+            else:
+                crawler = FacebookCrawler(url, cookie, proxy)
+                crawler.getCount()
+                comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+                comments = crawler.getComments()
 
 
         print(f"[{datetime.now()}] 📊 Post {post_name} có {comment_count} comment và {reaction_count} reaction")
@@ -46,9 +52,10 @@ def comment_progress(url, post_name, username, delay, token=None, cookie=None, p
             'posts',
             [{
                 'post_name': post_name,
-                'reaction_count': crawler.reaction_count,
-                'comment_count': crawler.comment_count,
-                'last_comment': comments[0]['created_time'] if comments else None
+                'reaction_count': reaction_count,
+                'comment_count': comment_count,
+                'last_comment': comments[0]['created_time'] if comments else None,
+                'status': status,
             }],
             'post_name'
         )
@@ -60,7 +67,7 @@ def comment_progress(url, post_name, username, delay, token=None, cookie=None, p
 
             # Lọc ra các comment chưa có trong database
             new_comments = [
-                (c['comment_id'], crawler.id, post_name, c['author_id'], c['author_name'], 
+                (c['comment_id'], post_id, post_name, c['author_id'], c['author_name'], 
                 c['author_avatar'], c['content'], '', '', c['created_time'], username)
                 for c in comments if c['comment_id'] not in existing_comment_ids
             ]
@@ -86,6 +93,7 @@ def process_post(post_data):
         try:
             # Lấy dữ liệu mới nhất mỗi lần lặp
             post_name = post_data[1]
+            post_id = post_data[0]
             url = post_data[2]
             username = post_data[-1]
             delay = post_data[-3]
@@ -114,13 +122,46 @@ def process_post(post_data):
                     cookie = random.choice(cookies)[1]
                     token = None
 
-            threading.Thread(target=comment_progress, args=(url, post_name, username, delay, token, cookie, proxy)).start()
+            threading.Thread(target=comment_progress, args=(url, post_name, post_id, username, delay, token, cookie, proxy)).start()
             sleep(delay/1000)  # Convert ms to seconds
 
         except Exception as e:
             print(f"\n[{datetime.now()}] ❌ Lỗi luồng xử lý {post_data[1]}:")
             traceback.print_exc()
             sleep(5)  # Đợi 5s trước khi thử lại
+
+
+def token_progress(token_id, token, proxy):
+    db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+    tk = FacebookToken(token, proxy)
+    if tk.me() == 'Invalid Token':
+        db.bulk_update(
+            'tokens',
+            [{'token_id': token_id, 'token': token, 'status': 'die'}],
+            'token_id'
+        )
+    db.close()
+
+def progress_token():
+    db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+    while True:
+        threads = []
+        proxies = db.fetch_data('proxies') or []
+        proxy = random.choice(proxies)[0] if proxies else None
+
+        tokens = db.fetch_data('tokens', condition=f"status = 'live'")
+        for tk in tokens:
+            token_id = tk[0]
+            token = tk[1]
+            thread = threading.Thread(target=token_progress, args=(token_id, token, proxy))
+            threads.append(thread)
+            thread.start()
+            sleep(0.1)  # Đợi 100ms trước khi tạo luồng tiếp theo
+        
+        for t in threads:
+            t.join()
+    
+        sleep(120)
 
 def cookie_progress(cookie, cookie_id, proxy):
     db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
@@ -149,7 +190,7 @@ def progress_cookie():
         proxies = db.fetch_data('proxies') or []
         proxy = random.choice(proxies)[0] if proxies else None
 
-        cookies = db.fetch_data('cookies')
+        cookies = db.fetch_data('cookies', condition=f"status = 'live'")
         for ck in cookies:
             cookie = ck[1]
             cookie_id = ck[0]
@@ -160,11 +201,13 @@ def progress_cookie():
         for t in threads:
             t.join()
 
-        sleep(300)
+        sleep(120)
+
 
 def main():
     print(f"[{datetime.now()}] 🚀 Khởi động hệ thống...")
     threading.Thread(target=progress_cookie).start()
+    threading.Thread(target=progress_token).start()
     while True:
         try:
             # Lấy danh sách post mới mỗi 30 giây

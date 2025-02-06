@@ -322,8 +322,9 @@ class FacebookToken:
         cookie = ''
         for ck in sub.json()['session_cookies']:
             cookie += f'{ck["name"]}={ck["value"]};'
-        return cookie
+            return cookie
     
+
     def getComments(self, object_id: str = '123456789_123456789') -> list:
         if '=' in object_id:
             object_id = object_id.split('_')[1]
@@ -338,7 +339,10 @@ class FacebookToken:
         comments = []
 
         for comment in response['data']:
-            comment_id = comment['id'].split('_')[1]
+            try:
+                comment_id = comment['id'].split('_')[1]
+            except:
+                comment_id = comment['id']
             post_id = comment['id'].split('_')[0]
             author_name = comment['from']['name']
             author_id = comment['from']['id']
@@ -365,18 +369,26 @@ class FacebookToken:
         return comments
     
     def getCount(self, object_id) -> tuple:
+        url = 'https://graph.facebook.com/'+object_id+'/?fields=reactions.summary(true),comments.summary(true)&access_token=' + self.token
         response = requests.get(
-            'https://graph.facebook.com/'+object_id+'/?fields=reactions.summary(true),comments.summary(true)&access_token=' + self.token,
+            url,
             proxies=self.proxies
         )
-
         response = json.loads(response.text)
-        reactions = response['reactions']['summary']['total_count'] if 'reactions' in response else 0
+        
+        reactions = response['reactions']['summary']['total_count']
+            
         try:
-            comments = response['comments']['summary']['total_count'] if 'comments' in response else 0
+            try:
+                comments = response['comments']['summary']['total_count'] if 'comments' in response else 0
+            except:
+                comments = response['comments']['count'] if 'comments' in response else 0
         except:
-            comments = response['comments']['count'] if 'comments' in response else 0
-        return reactions, comments
+            comments = 0
+        return comments, reactions
+    
+    def checkType(self):
+        pass
 
 
 TOKEN_TO_APP_ID = {

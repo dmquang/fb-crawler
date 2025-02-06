@@ -314,7 +314,6 @@
                 </thead>
                 <tbody>
                     <tr class="no-data">
-                        <td colspan="9">Loading comments...</td>
                     </tr>
                 </tbody>
             </table>
@@ -322,6 +321,11 @@
     </div>
 
     <script>
+        let currentPage = 1;
+        const limitPerPage = 20; // Số comment mỗi lần tải
+        let isFetching = false; // Ngăn gọi API liên tục
+        let hasMoreComments = true; // Kiểm tra còn dữ liệu để tải không
+
         async function filterComments() {
             const startDate = document.getElementById('start-date').value;
             const endDate = document.getElementById('end-date').value;
@@ -401,25 +405,29 @@
         }
 
         async function fetchComments() {
-            try {
-                // Lấy giá trị username từ localStorage
-                const currentUser = localStorage['username'];
-                
-                // Lấy giá trị filter từ localStorage
-                const startDate = localStorage.getItem('start_date');
-                const endDate = localStorage.getItem('end_date');
+            if (isFetching || !hasMoreComments) return;
 
-                // Gửi username và các tham số filter vào query string
-                const response = await fetch(`/api/comments?username=${currentUser}&start_date=${startDate}&end_date=${endDate}`);
-                
+            isFetching = true;
+
+            try {
+                const username = localStorage['username'];
+                const startDate = localStorage.getItem('start_date') || '';
+                const endDate = localStorage.getItem('end_date') || '';
+
+                const response = await fetch(`/api/comments?username=${username}&start_date=${startDate}&end_date=${endDate}&page=${currentPage}&limit=${limitPerPage}`);
+
                 if (response.ok) {
-                    const comments = await response.json();
-                    populateTable(comments);
+                    const data = await response.json();
+                    populateTable(data.comments);
+                    hasMoreComments = data.has_more;
+                    currentPage++; // Tăng trang để lần sau tải trang tiếp theo
                 } else {
                     console.error('Failed to fetch comments');
                 }
             } catch (error) {
                 console.error('Error fetching comments:', error);
+            } finally {
+                isFetching = false;
             }
         }
 
@@ -451,17 +459,13 @@
 
         function populateTable(comments) {
             const tableBody = document.querySelector('#commentsTable tbody');
-            tableBody.innerHTML = '';
 
-            if (!comments.length) {
+            if (!comments.length && currentPage === 1) {
                 const noDataRow = document.createElement('tr');
                 noDataRow.innerHTML = '<td colspan="9">No comments available</td>';
                 tableBody.appendChild(noDataRow);
                 return;
             }
-
-            // Sort comments by created_time in descending order
-            comments.sort((a, b) => b.created_time - a.created_time);
 
             comments.forEach((comment, index) => {
                 const row = document.createElement('tr');
@@ -489,6 +493,7 @@
                 tableBody.appendChild(row);
             });
         }
+
 
 
         async function hideComment(commentId) {
@@ -527,6 +532,15 @@
     </script>
 </body>
 <script>
+    window.addEventListener('scroll', () => {
+        const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+
+        // Khi kéo xuống gần cuối trang thì tải thêm dữ liệu
+        if (scrollTop + clientHeight >= scrollHeight - 10) {
+            fetchComments();
+        }
+    });
+
     const isadmin = localStorage['username']
     if (isadmin != 'admin') {
         document.getElementById('admin-btn').style.display = 'none';
