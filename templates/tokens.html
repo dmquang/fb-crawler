@@ -103,14 +103,19 @@
             }
 
             tokens.forEach((token, index) => {
+                // Kiểm tra nếu tất cả các giá trị trong token đều null thì bỏ qua
+                if (!token.token_id && !token.token && !token.status && !token.username) {
+                    return;
+                }
+
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${index + 1}</td>
-                    <td>${token.token_id}</td>
-                    <td class="copy-token" onclick="copyToClipboard('${token.token}')">
-                        ${maskToken(token.token)}
+                    <td>${token.token_id ? token.token_id : ''}</td>
+                    <td class="copy-token" ${token.token ? `onclick="copyToClipboard('${token.token}')"` : ''}>
+                        ${token.token ? maskToken(token.token) : ''}
                     </td>
-                    <td>${token.status}</td>
+                    <td>${token.status ? token.status : ''}</td>
                     <td>
                         <button class="action-btn delete-btn" 
                                 onclick="deleteToken('${token.token_id}')">
@@ -121,6 +126,7 @@
                 tbody.appendChild(row);
             });
         }
+
 
         function copyToClipboard(text) {
             navigator.clipboard.writeText(text).then(() => {

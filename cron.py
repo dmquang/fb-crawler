@@ -12,14 +12,16 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
         print(f"\n[{datetime.now()}] 🔄 Bắt đầu xử lý post: {post_name}")
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
         
+        comment_count, reaction_count = None, None
+
         try:
             status = 'active'
             # Lấy proxy từ database
-            proxies = db.fetch_data('proxies', condition=f"username = '{username}' AND status = 'Active'")
+            proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
             proxy = random.choice(proxies)[0] if proxies else None
 
             # Khởi tạo FacebookCrawler
-            crawler = FacebookCrawler(url, proxy)
+            crawler = FacebookCrawler(url=url, proxy=proxy)
             crawler.getCount()
             comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
             comments = crawler.getComments()
@@ -35,8 +37,6 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
             if token:
                 print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
                 fbtk = FacebookToken(token=token, proxy=proxy)
-                cookie = fbtk.get_cookie()
-                comment_count, reaction_count = fbtk.getCount(post_id)
                 comments = fbtk.getComments(post_id)
             else:
                 crawler = FacebookCrawler(url, cookie, proxy)
@@ -52,8 +52,8 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
             'posts',
             [{
                 'post_name': post_name,
-                'reaction_count': reaction_count,
-                'comment_count': comment_count,
+                'reaction_count': reaction_count if reaction_count else 0,
+                'comment_count': comment_count if comment_count else 0,
                 'last_comment': comments[0]['created_time'] if comments else None,
                 'status': status,
             }],

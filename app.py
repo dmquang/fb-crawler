@@ -394,53 +394,6 @@ def get_stopped_posts_v2():  # Renamed function to avoid conflict
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# @app.route('/api/posts')
-# def get_posts():
-#     try:
-#         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        
-#         auth_header = request.headers.get('Authorization')
-#         token = auth_header.split(" ")[1]
-#         data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-#         current_user = data['username']
-#         is_admin = data.get('is_admin', False)
-        
-#         if is_admin:
-#             sql = """
-#                 SELECT p.*, u.username 
-#                 FROM posts p
-#                 LEFT JOIN admin.users u ON p.username = u.username
-#                 WHERE p.status != 'stopped'
-#                 ORDER BY p.time_created DESC
-#             """
-#             posts = db.execute_query(sql)
-#         else:
-#             sql = """
-#                 SELECT * FROM posts 
-#                 WHERE username = %s AND status != 'stopped'
-#                 ORDER BY time_created DESC
-#             """
-#             posts = db.execute_query(sql, (current_user,))
-        
-#         posts_data = []
-#         for post in posts:
-#             posts_data.append({
-#                 'post_id': post[0],
-#                 'post_name': post[1],
-#                 'post_url': post[2],
-#                 'reaction_count': post[3],
-#                 'comment_count': post[4],
-#                 'time_created': post[5],
-#                 'last_comment': post[6],
-#                 'delay': post[7],
-#                 'status': post[8],
-#                 'username': post[9]
-#             })
-#         db.close()
-#         return jsonify(posts_data), 200
-        
-#     except Exception as e:
-#         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/posts/edit', methods=['POST'])
 def edit_post():
@@ -485,7 +438,7 @@ def add_post():
             proxy = random.choice(proxies)[0] if proxies else None
 
             # Khởi tạo FacebookCrawler
-            crawler = FacebookCrawler(post_url, proxy)
+            crawler = FacebookCrawler(url=post_url, proxy=proxy)
             crawler.getCount()
             comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
             comments = crawler.getComments()
@@ -503,7 +456,7 @@ def add_post():
                 fbtk = FacebookToken(token=token, proxy=proxy)
                 cookie = fbtk.get_cookie()
                 crawler = FacebookCrawler(post_url, cookie, proxy)
-                comment_count, reaction_count = fbtk.getCount(f"{crawler.id}")
+                comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
                 comments = fbtk.getComments(f"{crawler.id}")
             else:
                 crawler = FacebookCrawler(post_url, cookie, proxy)
@@ -516,14 +469,14 @@ def add_post():
             existing_comment_ids = {c[0] for c in db.fetch_data('comments')}
             new_comments = [
                 (c['comment_id'], crawler.id, post_name, c['author_id'], c['author_name'],
-                 c['author_avatar'], c['content'], '', '', c['created_time'], username, status)
+                 c['author_avatar'], c['content'], '', '', c['created_time'], username)
                 for c in comments if c['comment_id'] not in existing_comment_ids
             ]
             if new_comments:
                 db.add_data(
                     'comments',
                     ['comment_id', 'post_id', 'post_name', 'author_id', 'author_name',
-                     'author_avatar', 'content', 'info', 'phone_number', 'created_time', 'username', 'status'],
+                     'author_avatar', 'content', 'info', 'phone_number', 'created_time', 'username'],
                     new_comments
                 )
                 print(f"[{datetime.now()}] 💾 Đã lưu {len(new_comments)} comment mới cho {post_name}")
@@ -1054,7 +1007,7 @@ def user_proxies():
 
 @app.route('/api/user/tokens', methods=['GET', 'POST', 'DELETE'])
 def user_tokens():
-    #try:
+    try:
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
 
         if request.method == 'GET':
@@ -1110,9 +1063,9 @@ def user_tokens():
 
             return jsonify({'message': 'Token deleted successfully!'}), 200
         
-    #except Exception as e:
-        #print(f"Error occurred: {str(e)}")
-        #return jsonify({'error': 'Internal server error'}), 500
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/tokens')
 def tokens():

@@ -460,7 +460,7 @@
                 <td>${post.delay || 'N/A'}</td>
                 <td class="${post.status === 'active' ? 'status-active' : 'status-inactive'}">${escapeHtml(post.status)}</td>
                 <td class="action-cell">
-                    ${post.status === 'active' ? `<button class="action-btn stop-btn" onclick="stopPost('${escapeHtml(post.post_name)}')">Stop</button>` : ''}
+                    <button class="action-btn stop-btn" onclick="stopPost('${escapeHtml(post.post_name)}')">Stop</button>
                     <button class="action-btn delete-btn" onclick="deletePost('${escapeHtml(post.post_name)}')">Delete</button>
                 </td>
             `;

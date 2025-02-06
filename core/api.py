@@ -79,7 +79,7 @@ class FacebookCrawler:
             self.jazoest = auth.jazoest
             self.lsd = auth.lsd
             self.get_url()
-            
+        
         self.id = self.getId()
 
     def get_url(self):
@@ -173,12 +173,13 @@ class FacebookCrawler:
     def getId(self) -> str:
         # Lấy id của post
         post = self.session.get(self.url, cookies=self.cookies, proxies=self.proxies).text
-        self.owner_id = post.split('[{"__typename":"User","id":"')[1].split('"')[0]
+        
         if 'videos' in self.url:
             self.owner_id = post.split('{"actors":[{"__typename":"User","__isActor":"User","id":"')[1].split('"')[0] + '='
-
-        if 'reel' in self.url:
+        elif 'reel' in self.url:
             self.id_reel = post.split(',"initial_node_id":')[1].split(',')[0]
+        else:
+            self.owner_id = post.split('owner":{"__typename":"User","id":"')[1].split('"')[0]
         try:
             id = post.split('"post_id":"')[1].split('"')[0]
             return id

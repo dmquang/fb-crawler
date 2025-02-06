@@ -133,4 +133,4 @@ class DatabaseManager:
             self.conn.close()
             print("Database connection closed.")
         else:
-            print("Database connection is already closed or was not initialized.")
+            pass
