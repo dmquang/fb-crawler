@@ -35,9 +35,15 @@
         }
 
         .table-wrapper {
-            overflow-x: auto;
-            margin-top: 20px;
+            max-height: 75vh; /* Chiều cao tối đa */
+            overflow: auto; /* Hiển thị thanh cuộn nếu nội dung quá dài */
+            border: 1px solid #ddd; /* Viền để nhìn rõ khu vực */
+            border-radius: 8px; /* Bo tròn góc */
         }
+
+        /* table {
+            min-width: 1000px; 
+        } */
 
         table {
             width: 100%;
@@ -45,6 +51,7 @@
             background-color: white;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
             border-radius: 10px;
+            direction: btt;
         }
 
         th, td {
@@ -309,6 +316,7 @@
                         <th>Info</th>
                         <th>Post ID</th>
                         <th>Post Name</th>
+                        <th>Bình Luận</th>
                         <th>Phone Number</th>
                         <th>Note</th>
                     </tr>
@@ -348,25 +356,19 @@
         function formatDateTime(timestamp) {
             if (!timestamp) return 'N/A';
 
-            const now = Math.floor(Date.now() / 1000); // Lấy timestamp hiện tại (giây)
-            const diff = now - timestamp; // Số giây chênh lệch
+            const date = new Date(timestamp * 1000); // Chuyển từ giây sang milliseconds
 
-            if (diff < 0) return 'Trong tương lai'; // Tránh lỗi khi timestamp lớn hơn now
+            // Lấy thông tin giờ, phút, giây, ngày, tháng, năm
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0'); // Tháng bắt đầu từ 0
+            const year = date.getFullYear();
 
-            const seconds = diff;
-            const minutes = Math.floor(diff / 60);
-            const hours = Math.floor(diff / 3600);
-            const days = Math.floor(diff / 86400);
-            const months = Math.floor(diff / 2592000); // 30 ngày
-            const years = Math.floor(diff / 31536000); // 365 ngày
-
-            if (seconds < 60) return `${seconds} giây trước`;
-            if (minutes < 60) return `${minutes} phút trước`;
-            if (hours < 24) return `${hours} giờ trước`;
-            if (days < 30) return `${days} ngày trước`;
-            if (months < 12) return `${months} tháng trước`;
-            return `${years} năm trước`;
+            return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
         }
+
 
 
         function escapeHtml(unsafe) {
@@ -451,6 +453,7 @@
                         <div class="post-name">${escapeHtml(comment.post_name || 'Unknown')}</div>
                         <span class="tooltiptext">${escapeHtml(comment.content)}</span>
                     </td>
+                    <td>${escapeHtml(comment.content)}</td>
                     <td>${escapeHtml(comment.phone_number || '')}</td>
                     <td>${escapeHtml(comment.note || '')}</td>
                 `;

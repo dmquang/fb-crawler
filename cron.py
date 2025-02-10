@@ -14,12 +14,11 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
         
         comment_count, reaction_count = None, None
         # Lấy proxy từ database
-        proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
+        proxies = db.fetch_data('proxies', condition=f"username = 'admin'")
         proxy = random.choice(proxies)[0] if proxies else None
         try:
             try:
-                
-
+                    
                 # Khởi tạo FacebookCrawler
                 crawler = FacebookCrawler(url=url, proxy=proxy)
                 comments = crawler.getComments()
@@ -40,6 +39,7 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
                     crawler = FacebookCrawler(url, cookie, proxy)
                     comments = crawler.getComments()
                     comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
         except:
             print(f"[{datetime.now()}] 🌐 Proxy {proxy} bị giới hạn")
             return 

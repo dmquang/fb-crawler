@@ -430,9 +430,7 @@ def add_post():
                     comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
 
         except:
-            db.bulk_update('proxies', condition_key="proxy", data_list=[{'proxy': proxy, 'status': 'Blocked'}])
-            db.close()
-            return jsonify({'success': False, 'error': f'Proxy: {proxy} bị giới hạn!'}), 400
+            return jsonify({'success': False, 'error': f'Something wrong, please try again!'}), 400
 
         # Lưu comment vào database nếu có
         if comments:

@@ -14,10 +14,15 @@ class CheckProxies:
     @staticmethod
     def check(proxy: str):
         try:
-            proxys = proxy.split(':')
-            proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
-            response = requests.get('https://api64.ipify.org?format=json', proxies=proxies).json()
-            return True
+            try:
+                proxys = proxy.split(':')
+                proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
+                response = requests.get('https://api64.ipify.org?format=json', proxies=proxies).json()
+                return True
+            except:
+                proxys = proxy.split(':')
+                proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
+                response = requests.get('https://api.ipify.org?format=json', proxies=proxies).json()
         except:
             return False
 
@@ -436,7 +441,7 @@ class FacebookTokenExtractor:
             'sec-fetch-site': 'none',
             'sec-fetch-user': '?1',
             'upgrade-insecure-requests': '1',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
         })
         if proxy:
             self.set_proxy(proxy)
