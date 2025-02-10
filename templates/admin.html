@@ -260,7 +260,10 @@
                 <td>${user.link_follow_limit}</td>
                 <td>${user.link_hide_limit}</td>
                 <td>${daysRemaining} ngày nữa</td>
-                <td><button class="delete-btn" onclick="deleteUser(${user.username})">Xóa</button></td>
+                <td>
+                    <button class="delete-btn" onclick="deleteUser(${user.username})">Xóa</button> 
+                </td>
+                
             `;
             tbody.appendChild(row);
         });
@@ -338,6 +341,7 @@
     if (localStorage['username'] != 'admin') {
         window.location.href = '/';
     }
+
 </script>
 
 </body>

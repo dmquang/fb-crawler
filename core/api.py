@@ -24,6 +24,7 @@ class CheckProxies:
 class FacebookCrawler:
     def __init__(self, url: str, cookie: str = None, proxy: str = None):
         self.ok = True
+        self.ua = UserAgent().__get_user_agent__()
 
         self.proxy = proxy
         if proxy:
@@ -49,7 +50,7 @@ class FacebookCrawler:
             'sec-fetch-site': 'none',
             'sec-fetch-user': '?1',
             'upgrade-insecure-requests': '1',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'user-agent': self.ua,
         }
         
         self.session = requests.session()
@@ -106,7 +107,7 @@ class FacebookCrawler:
             'sec-fetch-dest': 'empty',
             'sec-fetch-mode': 'cors',
             'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'user-agent': self.ua,
             'x-asbd-id': '129477',
             'x-fb-friendly-name': 'CommentListComponentsRootQuery',
 
@@ -171,20 +172,25 @@ class FacebookCrawler:
         return sorted(temp_comments, key=lambda x: x['created_time'], reverse=True)
 
     def getId(self) -> str:
-        # Lấy id của post
+        """Lấy ID của bài post từ URL."""
         post = self.session.get(self.url, cookies=self.cookies, proxies=self.proxies).text
-        
+
         if 'videos' in self.url:
-            self.owner_id = post.split('{"actors":[{"__typename":"User","__isActor":"User","id":"')[1].split('"')[0] + '='
+            match = re.search(r'{"actors":\[{"__typename":"User","__isActor":"User","id":"(.*?)"', post)
+            self.owner_id = match.group(1) + '=' if match else None
         elif 'reel' in self.url:
-            self.id_reel = post.split(',"initial_node_id":')[1].split(',')[0]
+            match = re.search(r',"initial_node_id":(\d+)', post)
+            self.id_reel = match.group(1) if match else None
         else:
-            self.owner_id = post.split('owner":{"__typename":"User","id":"')[1].split('"')[0]
-        try:
-            id = post.split('"post_id":"')[1].split('"')[0]
-            return id
-        except:
-            self.ok = False
+            patterns = [
+                r'owner":{"__typename":"User","id":"(.*?)"',
+                r'props":{"actorID":null,"pageID":"(.*?)"',
+                r'actors":\[{"__typename":"User","id":"(.*?)"'
+            ]
+            self.owner_id = next((re.search(p, post).group(1) for p in patterns if re.search(p, post)), None)
+
+        match = re.search(r'"post_id":"(.*?)"', post)
+        return match.group(1) if match else None
 
     def getCookies(self) -> dict:
         # Lấy cookies từ url
@@ -214,7 +220,7 @@ class FacebookCrawler:
                 'sec-fetch-dest': 'empty',
                 'sec-fetch-mode': 'cors',
                 'sec-fetch-site': 'same-origin',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+                'user-agent': self.uaself.ua,
                 'x-asbd-id': '129477',
                 'x-fb-friendly-name': 'FBReelsFeedbackLikeQuery',
             }
@@ -248,18 +254,26 @@ class FacebookCrawler:
 
         else:
             response = requests.get(self.url, headers=self.headers, cookies=self.cookies, proxies=self.proxies)
-            self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].replace('}', '').split(',')[0])
+            try:
+                self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].replace('}', '').split(',')[0])
+            except:
+                self.reaction_count = int(response.text.split('important_reactors":{"nodes":[]},"reaction_count":{"count":')[1].split(',')[0])
             self.comment_count = int(response.text.split('"comments":{"total_count":')[1].split('}')[0])
 
         return (self.reaction_count, self.comment_count)
 
 class FacebookAuthencation:
     def __init__(self, cookie: str, proxy: str = None):
+        self.ua = UserAgent().__get_user_agent__()
         self.cookie = cookie
         self.proxy = proxy
         if proxy:
-            proxys = proxy.split(':')
-            self.proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
+            proxy_parts = proxy.split(":")
+            if len(proxy_parts) == 2:
+                self.proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+            elif len(proxy_parts) == 4:
+                ip, port, user, password = proxy_parts
+                self.proxies = {"http": f"http://{user}:{password}@{ip}:{port}", "https": f"http://{user}:{password}@{ip}:{port}"}
         else:
             self.proxies = None
 
@@ -282,7 +296,7 @@ class FacebookAuthencation:
             'sec-fetch-site': 'none',
             'sec-fetch-user': '?1',
             'upgrade-insecure-requests': '1',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'user-agent': self.ua,
         }
 
         self.user_id = self.get_id()
@@ -295,8 +309,8 @@ class FacebookAuthencation:
             self.fb_dtsg = response.split('"DTSGInitialData",[],{"token":"')[1].split('"')[0]
             self.lsd = response.split('"LSD",[],{"token":"')[1].split('"')[0]
             return user_id
-        except:
-
+        except Exception as e:
+            print(e)
             return 
             
 
@@ -323,7 +337,8 @@ class FacebookToken:
         cookie = ''
         for ck in sub.json()['session_cookies']:
             cookie += f'{ck["name"]}={ck["value"]};'
-            return cookie
+            
+        return cookie
     
 
     def getComments(self, object_id: str = '123456789_123456789') -> list:
@@ -398,6 +413,7 @@ TOKEN_TO_APP_ID = {
 
 class FacebookTokenExtractor:
     def __init__(self, token_type: str, proxy: str = None):
+        self.ua = UserAgent().__get_user_agent__()
         self.app_id = TOKEN_TO_APP_ID.get(token_type)
         if not self.app_id:
             raise ValueError("Invalid token type")

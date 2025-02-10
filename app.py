@@ -10,9 +10,11 @@ from io import BytesIO
 from flask import Response
 import random
 from datetime import datetime, timedelta
+from flask_socketio import SocketIO, emit
 
 # Khởi tạo Flask app
 app = Flask(__name__)
+socketio = SocketIO(app)
 
 SECRET_KEY = 'Hoàng Chương'  # Change this to a secure secret key
 
@@ -57,10 +59,6 @@ def posts_page():
 def postsoff_page():
     return render_template('/posts-off.html')
 
-@app.route('/comments')
-def comments():
-    return render_template('comments.html')
-
 @app.route('/cookies')
 def cookies():
     return render_template('cookies.html')
@@ -69,76 +67,28 @@ def cookies():
 def proxies():
     return render_template('proxies.html')
 
+@socketio.on('connect', namespace='/ws/comments')
+def handle_connect():
+    print('Client connected to comments WebSocket')
+    emit('message', {'data': 'Connected to WebSocket'})
 
-@app.route('/api/links', methods=['GET', 'POST'])
-def add_link():
-    db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-    if request.method == 'POST':
-        data = request.get_json()
-        name_post = data['name_post']
-        post_link = data['post_link']
+@app.route('/comments')
+def comments():
+    return render_template('comments.html')
 
-        # Xử lý dữ liệu và lưu vào cơ sở dữ liệu
-        fb = FacebookCrawler(url=post_link)
-        values_list = [
-            (fb.id, name_post, int(fb.reaction_count), int(fb.comment_count), int(time.time()), "user1", SCAN_DELAY, 'public', fb.url),
-        ]
-        columns = ["post_id", "post_name", "reaction_count", "comment_count", "time_created", "username", 'delay', 'status', 'post_url']
-        db.add_data("posts", columns, values_list)
-        db.close()
-
-        return jsonify({'message': 'Link added successfully'}), 200
-    elif request.method == 'GET':
-        # Lấy danh sách bài viết từ cơ sở dữ liệu
-        posts = db.fetch_data("posts")
-        
-        # Chuyển đổi kết quả thành định dạng JSON phù hợp
-        posts_data = []
-        for post in posts:
-            posts_data.append({
-                'id_post': post[0],
-                'name_post': post[1],
-                'author_name': post[2],
-                'author_url': post[3],
-                'reaction_count': post[4],
-                'comment_count': post[5],
-                'last_check': post[6]
-            })
-        
-        return jsonify(posts_data), 200
-        
-@app.route('/api/perform_action', methods=['POST'])
-def perform_action():
-    db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-    data = request.get_json()
-    action = data.get('action')
-    post_id = data.get('postId')
-
-    if not action or not post_id:
-        return jsonify({'message': 'Missing action or postId'}), 400
-    elif action == 'delete':
-        return perform_delete(db, post_id)
-    else:
-        return jsonify({'message': 'Invalid action'}), 400
-
-
-def perform_delete(db, post_id):
-    # Thực hiện hành động xóa bài viết
-    db.delete_data('posts', f"post_id = {post_id}")
-    return jsonify({'message': 'Delete action completed successfully'}), 200
-
-@app.route('/api/comments')
-def get_comments():
+@socketio.on('get_comments', namespace='/ws/comments')
+def send_comments(data):
     try:
-        username = request.args.get('username')
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-
-        page = int(request.args.get('page', 1))  # Trang mặc định là 1
-        limit = int(request.args.get('limit', 20))  # Mặc định mỗi lần tải 20 comment
+        username = data.get('username', '')
+        start_date = data.get('start_date', '')
+        end_date = data.get('end_date', '')
+        page = int(data.get('page', 1))  # Trang hiện tại
+        limit = int(data.get('limit', 30))  # Số comment mỗi lần tải
+        offset = (page - 1) * limit  # Tính offset cho SQL
 
         if not username:
-            return jsonify({'error': 'Username is required'}), 400
+            emit('error', {'error': 'Username is required'})
+            return
 
         if start_date == 'null':
             start_date = None
@@ -156,10 +106,12 @@ def get_comments():
             conditions.append(f"created_time <= UNIX_TIMESTAMP('{end_date} 23:59:59')")
 
         condition_query = ' AND '.join(conditions) if conditions else '1=1'
-
-        # Thêm điều kiện phân trang (OFFSET và LIMIT)
-        offset = (page - 1) * limit
-        query = f"SELECT * FROM comments WHERE {condition_query} ORDER BY created_time DESC LIMIT {limit} OFFSET {offset}"
+        query = f"""
+            SELECT * FROM comments 
+            WHERE {condition_query} 
+            ORDER BY created_time DESC 
+            LIMIT {limit} OFFSET {offset}
+        """
 
         comments = db.execute_query(query)
         db.close()
@@ -177,14 +129,18 @@ def get_comments():
                 'phone_number': comment[8],
                 'created_time': comment[9],
                 'username': comment[10],
+                'note': comment[11],
             }
             for comment in comments
         ]
 
-        return jsonify({'comments': comments_data, 'has_more': len(comments) == limit}), 200
+        # Kiểm tra còn comment hay không
+        has_more = len(comments_data) == limit
 
+        emit('comments', {'comments': comments_data, 'has_more': has_more})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        emit('error', {'error': str(e)})
+
 
 
 @app.route('/api/comments/export')
@@ -430,39 +386,53 @@ def add_post():
 
         # Kết nối database
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+        if post_url in [p[2] for p in db.fetch_data('posts')]:
+            db.close()
+            return jsonify({'success': False, 'error': 'Bài viết đã tồn tại'}), 400
         
         try:
-            status = 'active'
-            # Lấy proxy từ database
-            proxies = db.fetch_data('proxies', condition=f"username = '{username}' AND status = 'Active'")
-            proxy = random.choice(proxies)[0] if proxies else None
-
-            # Khởi tạo FacebookCrawler
-            crawler = FacebookCrawler(url=post_url, proxy=proxy)
-            crawler.getCount()
-            comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
-            comments = crawler.getComments()
-
-        except Exception:
-            status = 'privte'
-            # Nếu crawler thất bại, dùng token hoặc cookie
-            tokens = db.fetch_data('tokens') or []
-            cookies = db.fetch_data('cookies') or []
-            token = random.choice(tokens)[1] if tokens else None
-            cookie = random.choice(cookies)[1] if cookies else None
-
-            if token:
-                print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
-                fbtk = FacebookToken(token=token, proxy=proxy)
-                cookie = fbtk.get_cookie()
-                crawler = FacebookCrawler(post_url, cookie, proxy)
-                comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
-                comments = fbtk.getComments(f"{crawler.id}")
-            else:
-                crawler = FacebookCrawler(post_url, cookie, proxy)
-                crawler.getCount()
-                comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+            try:
+                status = 'active'
+                # Lấy proxy từ database
+                proxies = db.fetch_data('proxies') or []
+                if not proxies:
+                    return jsonify({'success': False, 'error': f'Không có proxy trong db!'}), 400
+                
+                proxy = random.choice(proxies)[0] if proxies else None
+                
+                # Khởi tạo FacebookCrawler
+                crawler = FacebookCrawler(url=post_url, proxy=proxy)
                 comments = crawler.getComments()
+                comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
+
+            except Exception:
+                status = 'privte'
+                # Nếu crawler thất bại, dùng token hoặc cookie
+                tokens = db.fetch_data('tokens') or []
+                cookies = db.fetch_data('cookies') or []
+                token = random.choice(tokens)[1] if tokens else None
+                cookie = random.choice(cookies)[1] if cookies else None
+
+                if token:
+                    print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+                    fbtk = FacebookToken(token=token, proxy=proxy)
+                    cookie = fbtk.get_cookie()
+                    crawler = FacebookCrawler(post_url, cookie, proxy)
+                    try:
+                        comment_count, reaction_count = fbtk.getCount(f"{crawler.owner_id}_{crawler.id}")
+                    except:
+                        comment_count, reaction_count = fbtk.getCount(f"{crawler.id}")
+                    comments = fbtk.getComments(f"{crawler.id}")
+                else:
+                    crawler = FacebookCrawler(post_url, cookie, proxy)
+                    comments = crawler.getComments()
+                    comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
+        except:
+            db.bulk_update('proxies', condition_key="proxy", data_list=[{'proxy': proxy, 'status': 'Blocked'}])
+            db.close()
+            return jsonify({'success': False, 'error': f'Proxy: {proxy} bị giới hạn!'}), 400
 
         # Lưu comment vào database nếu có
         if comments:
@@ -490,15 +460,14 @@ def add_post():
             columns=['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'status', 'delay'],
             values_list=[(post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else None, status, SCAN_DELAY)]
         )
-
+        db.close()
         return jsonify({'success': True}), 200
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
     finally:
-        db.close()  # Đảm bảo đóng kết nối database dù có lỗi hay không
-
+        db.close()  
 
 
 @app.route('/login')

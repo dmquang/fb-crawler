@@ -21,7 +21,8 @@ CREATE TABLE user.comments (
     info VARCHAR(1000),
     phone_number VARCHAR(100),
     created_time INT,
-    username VARCHAR(45)
+    username VARCHAR(45),
+    note TEXT
 );
 
 -- Tạo bảng user.cookies

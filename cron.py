@@ -13,36 +13,36 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
         
         comment_count, reaction_count = None, None
-
+        # Lấy proxy từ database
+        proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
+        proxy = random.choice(proxies)[0] if proxies else None
         try:
-            status = 'active'
-            # Lấy proxy từ database
-            proxies = db.fetch_data('proxies', condition=f"username = 'admin' AND status = 'Active'")
-            proxy = random.choice(proxies)[0] if proxies else None
+            try:
+                
 
-            # Khởi tạo FacebookCrawler
-            crawler = FacebookCrawler(url=url, proxy=proxy)
-            crawler.getCount()
-            comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
-            comments = crawler.getComments()
-
-        except Exception:
-            status = 'privte'
-            # Nếu crawler thất bại, dùng token hoặc cookie
-            tokens = db.fetch_data('tokens') or []
-            cookies = db.fetch_data('cookies') or []
-            token = random.choice(tokens)[1] if tokens else None
-            cookie = random.choice(cookies)[1] if cookies else None
-
-            if token:
-                print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
-                fbtk = FacebookToken(token=token, proxy=proxy)
-                comments = fbtk.getComments(post_id)
-            else:
-                crawler = FacebookCrawler(url, cookie, proxy)
-                crawler.getCount()
-                comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+                # Khởi tạo FacebookCrawler
+                crawler = FacebookCrawler(url=url, proxy=proxy)
                 comments = crawler.getComments()
+                comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
+            except Exception:
+                # Nếu crawler thất bại, dùng token hoặc cookie
+                tokens = db.fetch_data('tokens') or []
+                cookies = db.fetch_data('cookies') or []
+                token = random.choice(tokens)[1] if tokens else None
+                cookie = random.choice(cookies)[1] if cookies else None
+
+                if token:
+                    print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+                    fbtk = FacebookToken(token=token, proxy=proxy)
+                    comments = fbtk.getComments(post_id)
+                else:
+                    crawler = FacebookCrawler(url, cookie, proxy)
+                    comments = crawler.getComments()
+                    comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+        except:
+            print(f"[{datetime.now()}] 🌐 Proxy {proxy} bị giới hạn")
+            return 
 
 
         print(f"[{datetime.now()}] 📊 Post {post_name} có {comment_count} comment và {reaction_count} reaction")
@@ -55,12 +55,10 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
                 'reaction_count': reaction_count if reaction_count else 0,
                 'comment_count': comment_count if comment_count else 0,
                 'last_comment': comments[0]['created_time'] if comments else None,
-                'status': status,
             }],
             'post_name'
         )
 
-        
         if comments:
             comment_data = db.fetch_data('comments')
             existing_comment_ids = {c[0] for c in comment_data}  # Giả sử comment_id nằm ở vị trí đầu tiên trong tuple
@@ -76,7 +74,7 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
                 ['comment_id', 'post_id', 'post_name', 'author_id', 'author_name', 
                  'author_avatar', 'content', 'info', 'phone_number', 'created_time', 'username'],
                 new_comments
-            )
+            ) 
             print(f"[{datetime.now()}] 💾 Đã lưu {len(new_comments)} comment mới cho {post_name}")
 
         db.close()

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Comments Viewer</title>
     <link rel="icon" href="{{ url_for('static', filename='facebook.png') }}" type="image/png">
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -309,7 +310,7 @@
                         <th>Post ID</th>
                         <th>Post Name</th>
                         <th>Phone Number</th>
-                        <th>Action</th>
+                        <th>Note</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -322,69 +323,51 @@
 
     <script>
         let currentPage = 1;
-        const limitPerPage = 20; // Số comment mỗi lần tải
-        let isFetching = false; // Ngăn gọi API liên tục
-        let hasMoreComments = true; // Kiểm tra còn dữ liệu để tải không
+        let isFetching = false;
+        let hasMoreComments = true;
+        const commentsPerPage = 30; // Số lượng comment mỗi lần tải
+        const socket = io('/ws/comments');
 
-        async function filterComments() {
-            const startDate = document.getElementById('start-date').value;
-            const endDate = document.getElementById('end-date').value;
-            const username = localStorage['username']
+        socket.on('connect', () => {
+            console.log('Connected to WebSocket');
+            fetchComments();
+        });
 
-            if (!startDate || !endDate) {
-                alert('Please select both start and end dates.');
-                return;
-            }
+        socket.on('comments', (data) => {
+            populateTable(data.comments);
+            hasMoreComments = data.has_more;
+            if (hasMoreComments) currentPage++;
+            isFetching = false;
+        });
 
-            try {
-                const response = await fetch(`/api/comments?start_date=${startDate}&end_date=${endDate}&username=${username}`);
-                if (response.ok) {
-                    const comments = await response.json();
-                    populateTable(comments);
-                } else {
-                    console.error('Failed to fetch filtered comments');
-                }
-            } catch (error) {
-                console.error('Error filtering comments:', error);
-            }
-        }
-
-        async function exportToExcel() {
-            const startDate = document.getElementById('start-date').value;
-            const endDate = document.getElementById('end-date').value;
-            const username = localStorage['username']
-
-            try {
-                const response = await fetch(`/api/comments/export?start_date=${startDate}&username=${username}&end_date=${endDate}`);
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `comments_${startDate}_to_${endDate}.xlsx`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                } else {
-                    alert('Failed to export comments to Excel.');
-                }
-            } catch (error) {
-                console.error('Error exporting comments:', error);
-            }
-        }
-
+        socket.on('error', (data) => {
+            console.error('Error:', data.error);
+            isFetching = false;
+        });
 
         function formatDateTime(timestamp) {
-            const date = new Date(timestamp * 1000);
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            
-            return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
+            if (!timestamp) return 'N/A';
+
+            const now = Math.floor(Date.now() / 1000); // Lấy timestamp hiện tại (giây)
+            const diff = now - timestamp; // Số giây chênh lệch
+
+            if (diff < 0) return 'Trong tương lai'; // Tránh lỗi khi timestamp lớn hơn now
+
+            const seconds = diff;
+            const minutes = Math.floor(diff / 60);
+            const hours = Math.floor(diff / 3600);
+            const days = Math.floor(diff / 86400);
+            const months = Math.floor(diff / 2592000); // 30 ngày
+            const years = Math.floor(diff / 31536000); // 365 ngày
+
+            if (seconds < 60) return `${seconds} giây trước`;
+            if (minutes < 60) return `${minutes} phút trước`;
+            if (hours < 24) return `${hours} giờ trước`;
+            if (days < 30) return `${days} ngày trước`;
+            if (months < 12) return `${months} tháng trước`;
+            return `${years} năm trước`;
         }
+
 
         function escapeHtml(unsafe) {
             return unsafe
@@ -399,39 +382,34 @@
             const startDate = document.getElementById('start-date').value;
             const endDate = document.getElementById('end-date').value;
             
-            // Lưu vào localStorage
             localStorage.setItem('start_date', startDate);
             localStorage.setItem('end_date', endDate);
         }
 
-        async function fetchComments() {
+        function fetchComments(reset = false) {
             if (isFetching || !hasMoreComments) return;
-
             isFetching = true;
+            
+            const username = localStorage.getItem('username') || 'admin';
+            const startDate = localStorage.getItem('start_date') || '';
+            const endDate = localStorage.getItem('end_date') || '';
 
-            try {
-                const username = localStorage['username'];
-                const startDate = localStorage.getItem('start_date') || '';
-                const endDate = localStorage.getItem('end_date') || '';
-
-                const response = await fetch(`/api/comments?username=${username}&start_date=${startDate}&end_date=${endDate}&page=${currentPage}&limit=${limitPerPage}`);
-
-                if (response.ok) {
-                    const data = await response.json();
-                    populateTable(data.comments);
-                    hasMoreComments = data.has_more;
-                    currentPage++; // Tăng trang để lần sau tải trang tiếp theo
-                } else {
-                    console.error('Failed to fetch comments');
-                }
-            } catch (error) {
-                console.error('Error fetching comments:', error);
-            } finally {
-                isFetching = false;
+            if (reset) {
+                currentPage = 1;
+                hasMoreComments = true;
+                document.querySelector('#commentsTable tbody').innerHTML = '';
             }
+
+            socket.emit('get_comments', {
+                username: username,
+                start_date: startDate,
+                end_date: endDate,
+                page: currentPage,
+                limit: commentsPerPage
+            });
         }
 
-        async function filterComments() {
+        function filterComments() {
             const startDate = document.getElementById('start-date').value;
             const endDate = document.getElementById('end-date').value;
             const username = localStorage['username'];
@@ -441,20 +419,8 @@
                 return;
             }
 
-            // Lưu các giá trị filter vào localStorage
             saveFilterValues();
-
-            try {
-                const response = await fetch(`/api/comments?start_date=${startDate}&end_date=${endDate}&username=${username}`);
-                if (response.ok) {
-                    const comments = await response.json();
-                    populateTable(comments);
-                } else {
-                    console.error('Failed to fetch filtered comments');
-                }
-            } catch (error) {
-                console.error('Error filtering comments:', error);
-            }
+            fetchComments(true);
         }
 
         function populateTable(comments) {
@@ -486,15 +452,11 @@
                         <span class="tooltiptext">${escapeHtml(comment.content)}</span>
                     </td>
                     <td>${escapeHtml(comment.phone_number || '')}</td>
-                    <td class="action-cell">
-                        <button class="action-btn edit-btn" onclick="hideComment('${escapeHtml(comment.comment_id)}')">Hide</button>
-                    </td>
+                    <td>${escapeHtml(comment.note || '')}</td>
                 `;
                 tableBody.appendChild(row);
             });
         }
-
-
 
         async function hideComment(commentId) {
             if (!confirm('Are you sure you want to hide this comment?')) {
@@ -514,7 +476,7 @@
                 
                 if (data.success) {
                     alert('Comment hide successfully');
-                    fetchComments(); // Refresh table
+                    fetchComments(true); // Refresh table
                 } else {
                     alert('Failed to hide comment: ' + data.error);
                 }
@@ -526,24 +488,17 @@
 
         // Fetch comments initially
         fetchComments();
+                // Lắng nghe sự kiện cuộn để tải thêm dữ liệu khi gần cuối trang
+        window.addEventListener('scroll', () => {
+            if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 100) {
+                fetchComments();
+            }
+        });
 
-        // Refresh every 10 seconds
-        setInterval(fetchComments, 10000);
+        // Tự động làm mới comment mỗi 10 giây
+        setInterval(() => {
+            fetchComments(true); // Reset và tải lại từ đầu
+        }, 10000);
     </script>
 </body>
-<script>
-    window.addEventListener('scroll', () => {
-        const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
-
-        // Khi kéo xuống gần cuối trang thì tải thêm dữ liệu
-        if (scrollTop + clientHeight >= scrollHeight - 10) {
-            fetchComments();
-        }
-    });
-
-    const isadmin = localStorage['username']
-    if (isadmin != 'admin') {
-        document.getElementById('admin-btn').style.display = 'none';
-    }
-</script>
 </html>

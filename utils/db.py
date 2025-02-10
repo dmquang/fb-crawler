@@ -21,7 +21,8 @@ class DatabaseManager:
             'password': password,
             'database': database,
             'connection_timeout': 60,
-            'autocommit': True
+            'autocommit': True,
+            'auth_plugin': 'mysql_native_password'
         }
 
     def _connect(self) -> mysql.connector.connect:
