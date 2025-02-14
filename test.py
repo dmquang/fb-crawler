@@ -1,8 +1,14 @@
-from core.api import *
+# from core.api import *
 
 
-url = 'https://www.facebook.com/61557603607953/videos/412237938114686/#'
-proxy = 'hn01.quat.uk:8003:EagerProxy3:8fN1J7b6XB'
-fb = FacebookCrawler(url=url, proxy=proxy)
+# url = 'https://www.facebook.com/hatsanhphuongnguyen/videos/788106643076090/#'
+# proxy = '42.96.5.233:15949:tuanlee15949:aqofw'
+# fb = FacebookCrawler(url=url, proxy=proxy)
 
-print(fb.getComments())
+# print(fb.getComments())
+
+from utils import DatabaseManager
+from config import *
+
+db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
+print(db.fetch_data('proxies'))

@@ -478,7 +478,21 @@ def login():
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
-        
+        # Tạo token JWT
+
+        if username == ADMIN_USERNAME and password  == ADMIN_PASSWORD:
+            token = jwt.encode({
+                'username': username,
+                'exp': datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
+            }, SECRET_KEY, algorithm='HS256')
+
+            return jsonify({
+                    'success': True,
+                    'token': token,
+                    'username': username,
+                    'is_admin': True
+                }), 200
+
         # Kết nối tới database admin để xác thực người dùng
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='admin')
         

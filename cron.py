@@ -106,6 +106,8 @@ def process_post(post_data):
             proxy = random.choice(proxies)[0] if proxies else None
             
             # Random chọn token hoặc cookie
+            token = None
+            cookie = None
             auth = None
             if tokens or cookies:
                 if tokens and cookies:
