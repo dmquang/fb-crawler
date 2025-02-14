@@ -205,7 +205,7 @@ class FacebookCrawler:
 
     def getCookies(self) -> dict:
         # Lấy cookies từ url
-        response = requests.get(self.url, headers=self.headers)
+        response = requests.get(self.url, headers=self.headers, proxies=self.proxies)
         cookies = response.cookies.get_dict()
         if self.url != response.url:
             self.url = response.url
@@ -265,6 +265,7 @@ class FacebookCrawler:
 
         else:
             response = requests.get(self.url, headers=self.headers, cookies=self.cookies, proxies=self.proxies)
+            print(response.text)
             try:
                 self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].replace('}', '').split(',')[0])
             except:
