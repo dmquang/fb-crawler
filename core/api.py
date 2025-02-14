@@ -265,7 +265,6 @@ class FacebookCrawler:
 
         else:
             response = requests.get(self.url, headers=self.headers, cookies=self.cookies, proxies=self.proxies)
-            print(response.text)
             try:
                 self.reaction_count = int(response.text.split('"reaction_count":{"count":')[1].replace('}', '').split(',')[0])
             except:
