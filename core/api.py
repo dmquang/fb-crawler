@@ -29,7 +29,7 @@ class CheckProxies:
 class FacebookCrawler:
     def __init__(self, url: str, cookie: str = None, proxy: str = None):
         self.ok = True
-        self.ua = UserAgent().__get_user_agent__()
+        self.ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
 
         self.proxy = proxy
         if proxy:
@@ -186,6 +186,12 @@ class FacebookCrawler:
         elif 'reel' in self.url:
             match = re.search(r',"initial_node_id":(\d+)', post)
             self.id_reel = match.group(1) if match else None
+            patterns = [
+                r'owner":{"__typename":"User","id":"(.*?)"',
+                r'props":{"actorID":null,"pageID":"(.*?)"',
+                r'actors":\[{"__typename":"User","id":"(.*?)"'
+            ]
+            self.owner_id = next((re.search(p, post).group(1) for p in patterns if re.search(p, post)), None)
         else:
             patterns = [
                 r'owner":{"__typename":"User","id":"(.*?)"',
@@ -225,7 +231,7 @@ class FacebookCrawler:
                 'sec-fetch-dest': 'empty',
                 'sec-fetch-mode': 'cors',
                 'sec-fetch-site': 'same-origin',
-                'user-agent': self.uaself.ua,
+                'user-agent': self.ua,
                 'x-asbd-id': '129477',
                 'x-fb-friendly-name': 'FBReelsFeedbackLikeQuery',
             }
@@ -269,7 +275,7 @@ class FacebookCrawler:
 
 class FacebookAuthencation:
     def __init__(self, cookie: str, proxy: str = None):
-        self.ua = UserAgent().__get_user_agent__()
+        self.ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
         self.cookie = cookie
         self.proxy = proxy
         if proxy:
@@ -290,8 +296,6 @@ class FacebookAuthencation:
             'dpr': '1',
             'priority': 'u=0, i',
             'sec-ch-prefers-color-scheme': 'dark',
-            'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-            'sec-ch-ua-full-version-list': '"Google Chrome";v="131.0.6778.267", "Chromium";v="131.0.6778.267", "Not_A Brand";v="24.0.0.0"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-model': '""',
             'sec-ch-ua-platform': '"Windows"',
@@ -301,7 +305,7 @@ class FacebookAuthencation:
             'sec-fetch-site': 'none',
             'sec-fetch-user': '?1',
             'upgrade-insecure-requests': '1',
-            'user-agent': self.ua,
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
         }
 
         self.user_id = self.get_id()
@@ -340,6 +344,7 @@ class FacebookToken:
     def get_cookie(self) -> str:
         sub=requests.post('https://graph.facebook.com/auth/create_session_for_app', data={"locale": "vi_VN","format": "json","new_app_id": "6628568379","access_token": self.token,"generate_session_cookies":"1"}, proxies=self.proxies)
         cookie = ''
+        print(sub.json())
         for ck in sub.json()['session_cookies']:
             cookie += f'{ck["name"]}={ck["value"]};'
             
@@ -418,7 +423,7 @@ TOKEN_TO_APP_ID = {
 
 class FacebookTokenExtractor:
     def __init__(self, token_type: str, proxy: str = None):
-        self.ua = UserAgent().__get_user_agent__()
+        self.ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
         self.app_id = TOKEN_TO_APP_ID.get(token_type)
         if not self.app_id:
             raise ValueError("Invalid token type")

@@ -311,7 +311,7 @@
                     <tr>
                         <th>STT</th>
                         <th>Created Time</th>
-                        <th>Comment ID</th>
+                        <th>UID</th>
                         <th>Author</th>
                         <th>Info</th>
                         <th>Post ID</th>
@@ -440,7 +440,7 @@
                 row.innerHTML = `
                     <td>${index + 1}</td>
                     <td>${formatDateTime(comment.created_time)}</td>
-                    <td><a href="https://facebook.com/${escapeHtml(comment.comment_id)}" target="_blank">${escapeHtml(comment.comment_id)}</a></td>
+                    <td><a href="https://facebook.com/${escapeHtml(comment.author_id)}" target="_blank">${escapeHtml(comment.author_id)}</a></td>
                     <td>
                         <div class="author-info">
                             <img src="${escapeHtml(comment.author_avatar)}" alt="avatar" class="author-avatar">

@@ -18,13 +18,22 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
         proxy = random.choice(proxies)[0] if proxies else None
         try:
             try:
-                    
+                status = 'active'
+                # Lấy proxy từ database
+                proxies = db.fetch_data('proxies') or []
+                if not proxies:
+                    return 
+                
+                proxy = random.choice(proxies)[0] if proxies else None
+                
                 # Khởi tạo FacebookCrawler
                 crawler = FacebookCrawler(url=url, proxy=proxy)
                 comments = crawler.getComments()
                 comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
 
-            except Exception:
+
+            except:
+                status = 'private'
                 # Nếu crawler thất bại, dùng token hoặc cookie
                 tokens = db.fetch_data('tokens') or []
                 cookies = db.fetch_data('cookies') or []
@@ -32,13 +41,25 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
                 cookie = random.choice(cookies)[1] if cookies else None
 
                 if token:
-                    print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
-                    fbtk = FacebookToken(token=token, proxy=proxy)
-                    comments = fbtk.getComments(post_id)
-                else:
-                    crawler = FacebookCrawler(url, cookie, proxy)
-                    comments = crawler.getComments()
-                    comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+                    try:
+                        print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+                        fbtk = FacebookToken(token=token, proxy=proxy)
+                        cookie = fbtk.get_cookie()
+                        crawler = FacebookCrawler(url, cookie, proxy)
+                        comments = fbtk.getComments(f"{crawler.id}")
+                    except:
+                        if cookie:
+                            crawler = FacebookCrawler(url, cookie, proxy)
+                            comments = crawler.getComments()
+                            comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
+                if cookie:
+                    if comments:
+                        pass
+                    else:
+                        crawler = FacebookCrawler(url, cookie, proxy)
+                        comments = crawler.getComments()
+                        comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
 
         except:
             print(f"[{datetime.now()}] 🌐 Proxy {proxy} bị giới hạn")
@@ -61,9 +82,8 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
 
         if comments:
             comment_data = db.fetch_data('comments')
-            existing_comment_ids = {c[0] for c in comment_data}  # Giả sử comment_id nằm ở vị trí đầu tiên trong tuple
+            existing_comment_ids = {c[0] for c in comment_data} 
 
-            # Lọc ra các comment chưa có trong database
             new_comments = [
                 (c['comment_id'], post_id, post_name, c['author_id'], c['author_name'], 
                 c['author_avatar'], c['content'], '', '', c['created_time'], username)

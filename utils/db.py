@@ -136,4 +136,4 @@ class DatabaseManager:
 
     def close(self):
         """Placeholder để tránh lỗi khi gọi close nhưng không có kết nối từ trước"""
-        print("DatabaseManager không duy trì kết nối lâu dài, mỗi phương thức đã tự đóng kết nối.")
+        pass

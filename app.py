@@ -406,8 +406,8 @@ def add_post():
                 comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
 
 
-            except Exception:
-                status = 'privte'
+            except:
+                status = 'private'
                 # Nếu crawler thất bại, dùng token hoặc cookie
                 tokens = db.fetch_data('tokens') or []
                 cookies = db.fetch_data('cookies') or []
@@ -415,22 +415,44 @@ def add_post():
                 cookie = random.choice(cookies)[1] if cookies else None
 
                 if token:
-                    print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
-                    fbtk = FacebookToken(token=token, proxy=proxy)
-                    cookie = fbtk.get_cookie()
-                    crawler = FacebookCrawler(post_url, cookie, proxy)
                     try:
-                        comment_count, reaction_count = fbtk.getCount(f"{crawler.owner_id}_{crawler.id}")
+                        print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+                        fbtk = FacebookToken(token=token, proxy=proxy)
+                        cookie = fbtk.get_cookie()
+                        crawler = FacebookCrawler(post_url, cookie, proxy)
+                        try:
+                            comment_count, reaction_count = fbtk.getCount(f"{crawler.owner_id}_{crawler.id}")
+                        except:
+                            comment_count, reaction_count = fbtk.getCount(f"{crawler.id}")
+                        comments = fbtk.getComments(f"{crawler.id}")
                     except:
-                        comment_count, reaction_count = fbtk.getCount(f"{crawler.id}")
-                    comments = fbtk.getComments(f"{crawler.id}")
-                else:
-                    crawler = FacebookCrawler(post_url, cookie, proxy)
-                    comments = crawler.getComments()
-                    comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+                        if cookie:
+                            crawler = FacebookCrawler(post_url, cookie, proxy)
+                            comments = crawler.getComments()
+                            comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
+                if cookie:
+                    if comments:
+                        pass
+                    else:
+                        crawler = FacebookCrawler(post_url, cookie, proxy)
+                        comments = crawler.getComments()
+                        comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
 
         except:
-            return jsonify({'success': False, 'error': f'Something wrong, please try again!'}), 400
+            return jsonify({'success': False, 'error': f'Something wrong, please try again! Proxy: {proxy}'}), 400
+
+        # Lưu thông tin bài viết vào database
+        post_id = crawler.id
+        
+        time_created = int(time.time())
+        print((post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else None, status, SCAN_DELAY))
+
+        db.add_data(
+            'posts',
+            columns=['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'status', 'delay'],
+            values_list=[(post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else None, status, SCAN_DELAY)]
+        )
 
         # Lưu comment vào database nếu có
         if comments:
@@ -449,15 +471,7 @@ def add_post():
                 )
                 print(f"[{datetime.now()}] 💾 Đã lưu {len(new_comments)} comment mới cho {post_name}")
 
-        # Lưu thông tin bài viết vào database
-        post_id = crawler.id
-        time_created = int(time.time())
-
-        db.add_data(
-            'posts',
-            columns=['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'status', 'delay'],
-            values_list=[(post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else None, status, SCAN_DELAY)]
-        )
+        
         db.close()
         return jsonify({'success': True}), 200
 
