@@ -6,6 +6,8 @@
     <title>Comments Viewer</title>
     <link rel="icon" href="{{ url_for('static', filename='facebook.png') }}" type="image/png">
     <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/colresizable/1.6.0/colResizable.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/colresizable/1.6.0/colResizable.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -13,37 +15,52 @@
             padding: 0;
             min-height: 100vh;
             background: linear-gradient(135deg, #ece9e6, #ffffff);
-            padding-top: 60px; /* Add space for fixed navbar */
+            padding-top: 60px;
         }
 
         .container {
             width: 95%;
             max-width: 1400px;
-            padding: 15px;
             margin: 20px auto;
-            box-sizing: border-box;
-            background-color: white;
+            position: relative;
+            background: white;
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            resize: both;
+            overflow: hidden;
+            min-height: 400px;
+            min-width: 600px;
+        }
+
+        .grip {
+            width: 5px;
+            height: 100%;
+            background-color: #ccc;
+            cursor: col-resize;
+        }
+
+        .dragging {
+            opacity: 0.5;
         }
 
         h1 {
             text-align: center;
             color: #333;
-            margin-bottom: 30px;
+            margin: 10px 0;
             font-size: 2em;
         }
 
         .table-wrapper {
-            max-height: 75vh; /* Chiều cao tối đa */
-            overflow: auto; /* Hiển thị thanh cuộn nếu nội dung quá dài */
-            border: 1px solid #ddd; /* Viền để nhìn rõ khu vực */
-            border-radius: 8px; /* Bo tròn góc */
+            position: relative;
+            top: 80px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
         }
-
-        /* table {
-            min-width: 1000px; 
-        } */
 
         table {
             width: 100%;
@@ -51,7 +68,7 @@
             background-color: white;
             box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
             border-radius: 10px;
-            direction: btt;
+            direction: ltr;
         }
 
         th, td {
@@ -59,16 +76,31 @@
             text-align: left;
             vertical-align: middle;
             border-bottom: 1px solid #ddd;
-            min-width: 100px; /* Minimum width for columns */
+            min-width: 100px;
         }
 
         th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
             background-color: #f2f2f2;
             font-weight: bold;
             white-space: nowrap;
         }
 
-        /* Column specific widths */
+        td {
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        td:hover {
+            overflow: visible;
+            white-space: normal;
+            word-break: break-all;
+        }
+
         th:nth-child(1), 
         td:nth-child(1) {
             width: 50px;
@@ -123,12 +155,6 @@
         .delete-btn {
             background-color: #dc3545;
             color: white;
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: background-color 0.3s;
         }
 
         .delete-btn:hover {
@@ -163,37 +189,6 @@
         .tooltip:hover .tooltiptext {
             visibility: visible;
             opacity: 1;
-        }
-
-        /* Responsive Design */
-        @media screen and (max-width: 1200px) {
-            .container {
-                width: 98%;
-                padding: 10px;
-            }
-            
-            th, td {
-                padding: 8px;
-            }
-        }
-
-        @media screen and (max-width: 768px) {
-            h1 {
-                font-size: 1.5em;
-            }
-
-            .table-wrapper {
-                margin-top: 10px;
-            }
-
-            th, td {
-                padding: 6px;
-                font-size: 12px;
-            }
-
-            .action-btn {
-                padding: 4px 8px;
-            }
         }
 
         .navbar {
@@ -244,13 +239,20 @@
             color: white;
             background-color: #4CAF50;
         }
-        
+
         .filter-section {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
             display: flex;
             gap: 10px;
             align-items: center;
-            margin-bottom: 20px;
             justify-content: center;
+            background: white;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
         }
 
         .filter-section label {
@@ -275,7 +277,51 @@
             color: white;
         }
 
+        .resize-handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            right: 0;
+            bottom: 0;
+            cursor: se-resize;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+        }
 
+        .resize-handle:hover {
+            background: #e0e0e0;
+        }
+
+        @media screen and (max-width: 1200px) {
+            .container {
+                width: 98%;
+            }
+            
+            th, td {
+                padding: 8px;
+            }
+        }
+
+        @media screen and (max-width: 768px) {
+            h1 {
+                font-size: 1.5em;
+            }
+
+            th, td {
+                padding: 6px;
+                font-size: 12px;
+            }
+
+            .action-btn {
+                padding: 4px 8px;
+            }
+        }
+
+        @media screen and (max-height: 800px) {
+            .container {
+                max-height: 80vh;
+            }
+        }
     </style>
 </head>
 <body>
@@ -296,7 +342,6 @@
     </nav>
 
     <div class="container">
-        <h1>Comment Table</h1>
         <div class="filter-section">
             <label for="start-date">From: </label>
             <input type="date" id="start-date">
@@ -304,7 +349,7 @@
             <input type="date" id="end-date">
             <button class="action-btn filter-btn" onclick="filterComments()">Apply Filter</button>
             <button class="action-btn export-btn" onclick="exportToExcel()">Export to Excel</button>
-        </div>        
+        </div>
         <div class="table-wrapper">
             <table id="commentsTable">
                 <thead>
@@ -327,6 +372,7 @@
                 </tbody>
             </table>
         </div>
+        <div class="resize-handle"></div>
     </div>
 
     <script>
@@ -368,8 +414,6 @@
 
             return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
         }
-
-
 
         function escapeHtml(unsafe) {
             return unsafe
@@ -427,6 +471,7 @@
 
         function populateTable(comments) {
             const tableBody = document.querySelector('#commentsTable tbody');
+            tableBody.innerHTML = ''; // Xóa dữ liệu cũ trước khi thêm mới
 
             if (!comments.length && currentPage === 1) {
                 const noDataRow = document.createElement('tr');
@@ -458,6 +503,14 @@
                     <td>${escapeHtml(comment.note || '')}</td>
                 `;
                 tableBody.appendChild(row);
+            });
+
+            // Kích hoạt lại colResizable sau khi thêm dữ liệu mới
+            $('#commentsTable').colResizable({
+                liveDrag: true,
+                gripInnerHtml: "<div class='grip'></div>", 
+                draggingClass: "dragging", 
+                resizeMode: 'flex'
             });
         }
 
@@ -491,10 +544,22 @@
 
         // Fetch comments initially
         fetchComments();
-                // Lắng nghe sự kiện cuộn để tải thêm dữ liệu khi gần cuối trang
-        window.addEventListener('scroll', () => {
+
+        // Lắng nghe sự kiện cuộn để tải thêm dữ liệu khi gần cuối trang
+        tableWrapper.addEventListener('scroll', () => {
             if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 100) {
                 fetchComments();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('commentsTable')) {
+                $('#commentsTable').colResizable({
+                    liveDrag: true,
+                    gripInnerHtml: "<div class='grip'></div>", 
+                    draggingClass: "dragging", 
+                    resizeMode: 'flex'
+                });
             }
         });
 

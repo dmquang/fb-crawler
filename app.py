@@ -443,34 +443,16 @@ def add_post():
             return jsonify({'success': False, 'error': f'Something wrong, please try again! Proxy: {proxy}'}), 400
 
         # Lưu thông tin bài viết vào database
+        print(status)
         post_id = crawler.id
         
         time_created = int(time.time())
-        print((post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else None, status, SCAN_DELAY))
 
         db.add_data(
             'posts',
             columns=['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'status', 'delay'],
-            values_list=[(post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else None, status, SCAN_DELAY)]
+            values_list=[(post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else '0', status, SCAN_DELAY)]
         )
-
-        # Lưu comment vào database nếu có
-        if comments:
-            existing_comment_ids = {c[0] for c in db.fetch_data('comments')}
-            new_comments = [
-                (c['comment_id'], crawler.id, post_name, c['author_id'], c['author_name'],
-                 c['author_avatar'], c['content'], '', '', c['created_time'], username)
-                for c in comments if c['comment_id'] not in existing_comment_ids
-            ]
-            if new_comments:
-                db.add_data(
-                    'comments',
-                    ['comment_id', 'post_id', 'post_name', 'author_id', 'author_name',
-                     'author_avatar', 'content', 'info', 'phone_number', 'created_time', 'username'],
-                    new_comments
-                )
-                print(f"[{datetime.now()}] 💾 Đã lưu {len(new_comments)} comment mới cho {post_name}")
-
         
         db.close()
         return jsonify({'success': True}), 200

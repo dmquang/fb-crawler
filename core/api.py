@@ -14,15 +14,8 @@ class CheckProxies:
     @staticmethod
     def check(proxy: str):
         try:
-            try:
-                proxys = proxy.split(':')
-                proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
-                response = requests.get('https://api64.ipify.org?format=json', proxies=proxies).json()
-                return True
-            except:
-                proxys = proxy.split(':')
-                proxies = {'https': f'http://{proxys[-2]}:{proxys[-1]}@{proxys[0]}:{proxys[1]}'}
-                response = requests.get('https://api.ipify.org?format=json', proxies=proxies).json()
+            url = 'https://www.facebook.com/share/p/1CBBi4WdiE/'
+            fb = FacebookCrawler(url=url, proxy=proxy)
         except:
             return False
 
@@ -205,7 +198,7 @@ class FacebookCrawler:
 
     def getCookies(self) -> dict:
         # Lấy cookies từ url
-        response = requests.get(self.url, headers=self.headers)
+        response = requests.get(self.url, headers=self.headers, proxies=self.proxies)
         cookies = response.cookies.get_dict()
         if self.url != response.url:
             self.url = response.url

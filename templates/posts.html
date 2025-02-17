@@ -336,13 +336,12 @@
         <h1>Post Manager</h1>
         
         <!-- Add Post Form -->
-        <div class="add-post-form">
-            <div class="form-row">
-                <input type="text" id="newPostName" placeholder="Post Name" class="form-input">
-                <input type="text" id="newPostUrl" placeholder="Post URL" class="form-input">
-                <button onclick="addPost()" class="action-btn add-btn">Add Post</button>
+            <div class="add-post-form">
+                <div class="form-row">
+                    <textarea id="newPostUrls" placeholder="Enter URLs, one per line" class="form-input" rows="4"></textarea>
+                    <button onclick="addPost()" class="action-btn add-btn">Add Post</button>
+                </div>
             </div>
-        </div>
 
         <div class="table-wrapper">
             <table id="postsTable">
@@ -572,39 +571,48 @@
             }
         }
         async function addPost() {
-            const postName = document.getElementById('newPostName').value.trim();
-            const postUrl = document.getElementById('newPostUrl').value.trim();
-            const username = localStorage['username']
-            if (!postName || !postUrl) {
-                alert('Please fill in Post Name and Post URL.');
+            const postUrls = document.getElementById('newPostUrls').value.trim();
+            const username = localStorage['username'];
+
+            if (!postUrls) {
+                alert('Please enter at least one URL.');
                 return;
             }
+
+            const urls = postUrls.split('\n').map(url => url.trim()).filter(url => url);
+
+            if (urls.length === 0) {
+                alert('Please enter valid URLs.');
+                return;
+            }
+
             try {
-                const response = await fetch('/api/posts/add', {
+                const response = await fetch('/api/posts/add-multiple', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        post_name: postName,
-                        post_url: postUrl,
+                        post_urls: urls,
                         username: username
                     })
                 });
+
                 const data = await response.json();
                 if (data.success) {
-                    alert('Post added successfully');
-                    document.getElementById('newPostName').value = '';
-                    document.getElementById('newPostUrl').value = '';
+                    alert('Posts added successfully');
+                    document.getElementById('newPostUrls').value = '';
                     fetchUserPosts();
                 } else {
-                    alert('Failed to add post: ' + data.error);
+                    alert('Failed to add posts: ' + data.error);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Failed to add post. Please try again.');
+                alert('Failed to add posts. Please try again.');
             }
         }
+
+        
         document.getElementById('newPostUrl').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 addPost();

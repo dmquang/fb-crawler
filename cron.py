@@ -157,7 +157,7 @@ def token_progress(token_id, token, proxy):
     if tk.me() == 'Invalid Token':
         db.bulk_update(
             'tokens',
-            [{'token_id': token_id, 'token': token, 'status': 'die'}],
+            [{'token_id': token_id, 'status': 'die'}],
             'token_id'
         )
     db.close()
@@ -189,11 +189,6 @@ def cookie_progress(cookie, cookie_id, proxy):
     gettoken = FacebookTokenExtractor('EAAAAAY', proxy=proxy)
     try:
         token = gettoken.get_login(cookie)['access_token']
-        db.bulk_update(
-            'tokens',
-            [{'token_id': cookie_id, 'token': token}],
-            'token_id'
-        )
     except:
         db.bulk_update(
             'cookies',
