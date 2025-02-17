@@ -447,6 +447,10 @@ def add_post():
         post_id = crawler.id
         
         time_created = int(time.time())
+<<<<<<< HEAD
+=======
+        print((post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else '0', status, SCAN_DELAY))
+>>>>>>> 43288b32a87919d4b0da112401e13d3caae1bb6f
 
         db.add_data(
             'posts',
