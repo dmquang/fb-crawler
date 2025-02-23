@@ -143,7 +143,6 @@ def process_post(post_data):
                     token = None
 
             threading.Thread(target=comment_progress, args=(url, post_name, post_id, username, delay, token, cookie, proxy)).start()
-            sleep(delay/1000)  # Convert ms to seconds
 
         except Exception as e:
             print(f"\n[{datetime.now()}] ❌ Lỗi luồng xử lý {post_data[1]}:")
