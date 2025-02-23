@@ -62,7 +62,6 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
                         comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
 
         except:
-            print(f"[{datetime.now()}] 🌐 Proxy {proxy} bị giới hạn")
             return 
 
 
@@ -83,7 +82,7 @@ def comment_progress(url, post_name, post_id, username, delay, token=None, cooki
         if comments:
             comment_data = db.fetch_data('comments')
             existing_comment_ids = {c[0] for c in comment_data} 
-
+    
             new_comments = [
                 (c['comment_id'], post_id, post_name, c['author_id'], c['author_name'], 
                 c['author_avatar'], c['content'], '', '', c['created_time'], username)
@@ -143,7 +142,7 @@ def process_post(post_data):
                     token = None
 
             threading.Thread(target=comment_progress, args=(url, post_name, post_id, username, delay, token, cookie, proxy)).start()
-            sleep(delay/1000) 
+            sleep(SCAN_DELAY/1000) 
 
         except Exception as e:
             print(f"\n[{datetime.now()}] ❌ Lỗi luồng xử lý {post_data[1]}:")
