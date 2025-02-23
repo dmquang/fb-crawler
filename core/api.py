@@ -14,9 +14,11 @@ class CheckProxies:
     @staticmethod
     def check(proxy: str):
         try:
-            url = 'https://www.facebook.com/share/p/1CBBi4WdiE/'
+            url = 'https://www.facebook.com/ButEDMMusique/posts/pfbid02oKDCVpz5iwX59NraqN7acoSSaphAtRwmB3RoNwgKvxkCL5NABVbrzcJqiQv5BEDKl'
             fb = FacebookCrawler(url=url, proxy=proxy)
-        except:
+            return True
+        except  Exception as e:
+            print(e)
             return False
 
 class FacebookCrawler:
