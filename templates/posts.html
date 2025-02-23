@@ -350,7 +350,6 @@
                         <th>STT</th>
                         <th>Created Time</th>
                         <th>Post ID</th>
-                        <th>Post Name</th>
                         <th>Last Comment</th>
                         <th>Comments</th>
                         <th>Likes</th>
@@ -464,7 +463,6 @@
                 <td>${index + 1}</td>
                 <td>${formatDateTime(post.time_created)}</td>
                 <td><a href="${escapeHtml(post.post_url)}" target="_blank">${escapeHtml(post.id)}</a></td>
-                <td>${escapeHtml(post.post_name)}</td>
                 <td>${formatDateTime(post.last_comment)}</td>
                 <td>${post.comment_count || 0}</td>
                 <td>${post.reaction_count || 0}</td>
@@ -515,7 +513,6 @@
             e.preventDefault();
             
             const formData = {
-                post_name: document.getElementById('editPostName').value,
                 post_url: document.getElementById('editPostUrl').value,
                 delay: parseInt(document.getElementById('editDelay').value)
             };
@@ -613,11 +610,6 @@
         }
 
         
-        document.getElementById('newPostUrl').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                addPost();
-            }
-        });
         fetchUserPosts();
         setInterval(fetchUserPosts, 15000);
 
