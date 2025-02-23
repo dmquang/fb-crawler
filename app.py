@@ -11,6 +11,7 @@ from flask import Response
 import random
 from datetime import datetime, timedelta
 from flask_socketio import SocketIO, emit
+import threading
 
 # Khởi tạo Flask app
 app = Flask(__name__)
@@ -372,96 +373,108 @@ def edit_post():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+def add_multiple_posts(post_url, username, db):
+    # Kết nối database
+    
+        
+    if post_url in [p[2] for p in db.fetch_data('posts')]:
+            db.close()
+            return 
+        
+    try:
+        try:
+            status = 'active'
+            # Lấy proxy từ database
+            proxies = db.fetch_data('proxies') or []
+            if not proxies:
+                return 
+            
+            proxy = random.choice(proxies)[0] if proxies else None
+            
+            # Khởi tạo FacebookCrawler
+            crawler = FacebookCrawler(url=post_url, proxy=proxy)
+            comments = crawler.getComments()
+            comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
+
+        except:
+            status = 'private'
+            # Nếu crawler thất bại, dùng token hoặc cookie
+            tokens = db.fetch_data('tokens') or []
+            cookies = db.fetch_data('cookies') or []
+            token = random.choice(tokens)[1] if tokens else None
+            cookie = random.choice(cookies)[1] if cookies else None
+
+            if token:
+                try:
+                    print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
+                    fbtk = FacebookToken(token=token, proxy=proxy)
+                    cookie = fbtk.get_cookie()
+                    crawler = FacebookCrawler(post_url, cookie, proxy)
+                    try:
+                        comment_count, reaction_count = fbtk.getCount(f"{crawler.owner_id}_{crawler.id}")
+                    except:
+                        comment_count, reaction_count = fbtk.getCount(f"{crawler.id}")
+                    comments = fbtk.getComments(f"{crawler.id}")
+                except:
+                    if cookie:
+                        crawler = FacebookCrawler(post_url, cookie, proxy)
+                        comments = crawler.getComments()
+                        comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
+            if cookie:
+                if comments:
+                    pass
+                else:
+                    crawler = FacebookCrawler(post_url, cookie, proxy)
+                    comments = crawler.getComments()
+                    comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+
+    except:
+        return 
+
+    # Lưu thông tin bài viết vào database
+    print(status)
+    post_id = crawler.id
+    post_name = post_id
+    time_created = int(time.time())
+
+    db.add_data(
+        'posts',
+        columns=['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'status', 'delay'],
+        values_list=[(post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else '0', status, SCAN_DELAY)]
+    )
+    
+    db.close()
+    
+
 @app.route('/api/posts/add', methods=['POST'])
 def add_post():
     try:
         # Nhận dữ liệu từ request
         data = request.get_json()
-        post_name = data.get('post_name')
-        post_url = data.get('post_url')
+        post_urls = data.get('post_urls')
         username = data.get('username')
+        threads = []
 
-        if not post_name or not post_url or not username:
-            return jsonify({'success': False, 'error': 'Thiếu thông tin đầu vào'}), 400
-
-        # Kết nối database
         db = DatabaseManager(host=DB_HOST, port=DB_PORT, user=DB_USER, password=DB_PASSWORD, database='user')
-        if post_url in [p[2] for p in db.fetch_data('posts')]:
-            db.close()
-            return jsonify({'success': False, 'error': 'Bài viết đã tồn tại'}), 400
+        proxies = db.fetch_data('proxies') or []
+        if not proxies:
+            return jsonify({'success': False, 'error': 'No proxies available'}), 404
+
+        for post_url in post_urls:
+            t = threading.Thread(target=add_multiple_posts, args=(post_url, username, db))
+            threads.append(t)
+            t.start()
         
-        try:
-            try:
-                status = 'active'
-                # Lấy proxy từ database
-                proxies = db.fetch_data('proxies') or []
-                if not proxies:
-                    return jsonify({'success': False, 'error': f'Không có proxy trong db!'}), 400
-                
-                proxy = random.choice(proxies)[0] if proxies else None
-                
-                # Khởi tạo FacebookCrawler
-                crawler = FacebookCrawler(url=post_url, proxy=proxy)
-                comments = crawler.getComments()
-                comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
+        for t in threads:
+            t.join()
 
-
-            except:
-                status = 'private'
-                # Nếu crawler thất bại, dùng token hoặc cookie
-                tokens = db.fetch_data('tokens') or []
-                cookies = db.fetch_data('cookies') or []
-                token = random.choice(tokens)[1] if tokens else None
-                cookie = random.choice(cookies)[1] if cookies else None
-
-                if token:
-                    try:
-                        print(f"[{datetime.now()}] 🔑 Sử dụng token cho {post_name}")
-                        fbtk = FacebookToken(token=token, proxy=proxy)
-                        cookie = fbtk.get_cookie()
-                        crawler = FacebookCrawler(post_url, cookie, proxy)
-                        try:
-                            comment_count, reaction_count = fbtk.getCount(f"{crawler.owner_id}_{crawler.id}")
-                        except:
-                            comment_count, reaction_count = fbtk.getCount(f"{crawler.id}")
-                        comments = fbtk.getComments(f"{crawler.id}")
-                    except:
-                        if cookie:
-                            crawler = FacebookCrawler(post_url, cookie, proxy)
-                            comments = crawler.getComments()
-                            comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
-
-                if cookie:
-                    if comments:
-                        pass
-                    else:
-                        crawler = FacebookCrawler(post_url, cookie, proxy)
-                        comments = crawler.getComments()
-                        comment_count, reaction_count = crawler.comment_count, crawler.reaction_count
-
-        except:
-            return jsonify({'success': False, 'error': f'Something wrong, please try again! Proxy: {proxy}'}), 400
-
-        # Lưu thông tin bài viết vào database
-        print(status)
-        post_id = crawler.id
-        
-        time_created = int(time.time())
-
-        db.add_data(
-            'posts',
-            columns=['post_id', 'post_name', 'post_url', 'username', 'reaction_count', 'comment_count', 'time_created', 'last_comment', 'status', 'delay'],
-            values_list=[(post_id, post_name, post_url, username, int(reaction_count), int(comment_count), time_created, comments[0]['created_time'] if comments else '0', status, SCAN_DELAY)]
-        )
-        
-        db.close()
         return jsonify({'success': True}), 200
 
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-    finally:
-        db.close()  
 
 
 @app.route('/login')

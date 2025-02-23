@@ -1,6 +1,6 @@
-DB_HOST = 'localhost'  # Địa chỉ host (localhost hoặc IP)
+DB_HOST = '103.252.93.246'  # Địa chỉ host (localhost hoặc IP)
 DB_PORT = 3306         # Cổng mặc định của MySQL
-DB_USER = 'root'       # Tên người dùng
+DB_USER = 'root1'       # Tên người dùng
 DB_PASSWORD = '123456' # Mật khẩu
 
 SCAN_DELAY = 10000 #delay quét, đơn vị (ms)
